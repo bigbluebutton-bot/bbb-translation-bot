@@ -1,6 +1,8 @@
 import socket
 import time
 
+import threading
+
 import argparse
 import io
 import os
@@ -74,15 +76,33 @@ recorder.listen_in_background(source, record_callback, phrase_time_limit=record_
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.connect(('localhost', 5000))
 
+loop = True
+# receive data from the server
+def receve():
+    while loop:
+        transcription = s.recv(1024).decode("utf-8") 
+        if transcription:
+            os.system('cls' if os.name=='nt' else 'clear')
+            # Clear the console to reprint the updated transcription.
+            print(transcription)
+        # Flush stdout.
+        print('', end='', flush=True)
 
-while True:
+thread = threading.Thread(target=receve)
+thread.start()
+
+
+while loop:
     try:
         # Pull raw recorded audio from the queue.
         if not data_queue.empty():
-            while not data_queue.empty():
-                data = data_queue.get()
-                s.sendall(data)
+            data = data_queue.get()
+            s.sendall(data)
+        
+
+
     except KeyboardInterrupt:
+        loop = False
         break
 
 s.close()

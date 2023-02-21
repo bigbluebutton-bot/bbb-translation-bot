@@ -59,21 +59,21 @@ def main():
     transcription = ['']
 
     srv = Server('localhost', 5000, 5)
-    def OnConnected(client):
-        print("Connected by", client.addr)
+    def OnConnected(c):
+        print("Connected by", c.addr)
 
-        client.OnDisconnected(lambda: 
-            print("Disconnected by", client.addr)
+        c.OnDisconnected(lambda: 
+            print("Disconnected by", c.addr)
         )
 
-        client.OnTimeout(lambda:
-            print("Timeout by", client.addr)
+        c.OnTimeout(lambda:
+            print("Timeout by", c.addr)
         )
 
         def onmessage(data):
             data_queue.put(data)
 
-        client.OnMessage(onmessage)
+        c.OnMessage(onmessage)
     srv.OnConnected(OnConnected)
     print("Starting server: 127.0.0.1:5000...")
     srv.start()
@@ -121,6 +121,16 @@ def main():
                     transcription.append(text)
                 else:
                     transcription[-1] = text
+
+                # send text to client
+                if len(srv.clients) > 0:
+                    client = srv.clients[0]
+                    if client:
+                        try:
+                            for line in transcription:
+                                client.Send(str.encode(line))
+                        except:
+                            pass
 
                 # Clear the console to reprint the updated transcription.
                 os.system('cls' if os.name=='nt' else 'clear')
