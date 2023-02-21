@@ -11,20 +11,28 @@ class Server:
         self.backlog = backlog
         self.timeout = timeout
 
+    socket = None
     def start(self):
-        self.thread = threading.Thread(target=self.__start)
-        self.thread.start()
+        if self.socket != None:
+            return
 
-    def __start(self):
         print("Starting server: " + self.host + ":" + str(self.port) + "...")
 
         self.running = True
         self.clients = []
+        try:
+            self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            self.socket.bind((self.host, self.port))
+            self.socket.listen(self.backlog)
+        except:
+            raise RuntimeError("Failed to start server")
+            return
 
-        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.socket.bind((self.host, self.port))
-        self.socket.listen(self.backlog)
+        self.thread = threading.Thread(target=self.__start)
+        self.thread.start()
 
+    def __start(self):
         print("Waiting for connections...")
         while self.running:
             try:
@@ -40,8 +48,13 @@ class Server:
         self.clients.remove(client)
 
     def stop(self):
+        if self.socket == None:
+            return
+        
         print("Stopping server...")
         self.running = False
+        if hasattr(self.socket, '_sock'):
+            self.socket._sock.close()
         self.socket.close()
 
         # open a conection to close the socket
@@ -56,6 +69,9 @@ class Server:
         clinetslist = self.clients.copy()
         for client in clinetslist:
             client.stop()
+
+        self.socket.close()
+        self.socket = None
 
 
     # create a new thread to handle the connection
@@ -80,11 +96,19 @@ class Server:
                 if data:
                     self.last_recv = time.time()
                     print(data)
+                    self.conn.sendall(data)
 
         def stop(self):
             print("Stopping client " + str(self.addr))
             self.running = False
-            self.conn.close()
+            try:
+                self.conn.shutdown(socket.SHUT_RDWR)
+                if hasattr(self.conn, '_sock'):
+                    self.conn._sock.close()
+                self.conn.close()
+            except:
+                pass
+            self.conn = None
             self.method_to_remove_client(self)
 
 
