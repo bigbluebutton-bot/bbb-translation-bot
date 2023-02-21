@@ -11,12 +11,12 @@ class Server:
         self.backlog = backlog
         self.timeout = timeout
 
+        self.OnConnectedCallback = []
+
     socket = None
     def start(self):
         if self.socket != None:
             return
-
-        print("Starting server: " + self.host + ":" + str(self.port) + "...")
 
         self.running = True
         self.clients = []
@@ -33,14 +33,15 @@ class Server:
         self.thread.start()
 
     def __start(self):
-        print("Waiting for connections...")
         while self.running:
             try:
                 conn, addr = self.socket.accept()
                 if conn and self.running:
-                    print("Connected by", addr)
                     client = self.__Client(self.__remove_client, conn, addr, self.timeout)
                     self.clients.append(client)
+
+                    self.EmitConnected(client)
+                    client.start()
             except socket.timeout:
                 pass
 
@@ -51,7 +52,6 @@ class Server:
         if self.socket == None:
             return
         
-        print("Stopping server...")
         self.running = False
         if hasattr(self.socket, '_sock'):
             self.socket._sock.close()
@@ -73,6 +73,16 @@ class Server:
         self.socket.close()
         self.socket = None
 
+    # Events
+    def OnConnected(self, callback):
+        self.OnConnectedCallback.append(callback)
+
+    def EmitConnected(self, client):
+        if self.OnConnectedCallback:
+            for callback in self.OnConnectedCallback:
+                thread = threading.Thread(target=callback, args=(client,))
+                thread.start()
+
 
     # create a new thread to handle the connection
     class __Client:
@@ -81,25 +91,39 @@ class Server:
             self.conn = conn
             self.addr = addr
             self.timeout = timeout
-            self.thread = threading.Thread(target=self.start)
+            self.thread = threading.Thread(target=self.__start)
+
+            self.OnDisconnectedCallback = []
+            self.OnTimeoutCallback = []
+            self.OnMessageCallback = []
+
+        def start(self):
+            if self.conn == None or self.running == True:
+                return
             self.thread.start()
 
-        running = True
-        def start(self):
+        running = False
+        def __start(self):
+            self.running = True
             self.last_recv = time.time()
             while self.running:
                 if time.time() - self.last_recv > self.timeout:
-                    print("Connection of " + str(self.addr) + " timed out.")
+                    self.EmitTimeout()
                     self.stop()
                     return
-                data = self.conn.recv(1024)
+                try:
+                    data = self.conn.recv(1024)
+                except:
+                    self.stop()
+                    return
                 if data:
                     self.last_recv = time.time()
-                    print(data)
-                    self.conn.sendall(data)
+                    self.EmitMessage(data)
 
         def stop(self):
-            print("Stopping client " + str(self.addr))
+            if self.conn == None or self.running == False:
+                return
+            self.EmitDisconnected()
             self.running = False
             try:
                 self.conn.shutdown(socket.SHUT_RDWR)
@@ -111,13 +135,72 @@ class Server:
             self.conn = None
             self.method_to_remove_client(self)
 
+        def Send(self, data):
+            if self.conn:
+                try:
+                    self.conn.sendall(data)
+                except:
+                    pass
+
+        # Events
+        def OnDisconnected(self, callback):
+            self.OnDisconnectedCallback.append(callback)
+        
+        def EmitDisconnected(self):
+            if self.OnDisconnectedCallback:
+                for callback in self.OnDisconnectedCallback:
+                    thread = threading.Thread(target=callback)
+                    thread.start()
+
+        def OnTimeout(self, callback):
+            self.OnTimeoutCallback.append(callback)
+        
+        def EmitTimeout(self):
+            if self.OnTimeoutCallback:
+                for callback in self.OnTimeoutCallback:
+                    thread = threading.Thread(target=callback)
+                    thread.start()
+
+        def OnMessage(self, callback):
+            self.OnMessageCallback.append(callback)
+        
+        def EmitMessage(self, data):
+            if self.OnMessageCallback:
+                for callback in self.OnMessageCallback:
+                    thread = threading.Thread(target=callback, args=(data,))
+                    thread.start()
+
+
+def OnConnected(client):
+    print("Connected by", client.addr)
+
+    client.OnDisconnected(lambda: 
+        print("Disconnected by", client.addr)
+    )
+
+    client.OnTimeout(lambda:
+        print("Timeout by", client.addr)
+    )
+
+    def onmessage(data):
+        print("Message from", client.addr, ": ", data)
+        client.Send(data)
+    client.OnMessage(onmessage)
+
+
 
 def main():
     SRV = Server('localhost', 5000, 5)
+    SRV.OnConnected(OnConnected)
+
+    print("Starting server: 127.0.0.1:5000...")
     SRV.start()
+    print("Waiting for connections...")
+
     time.sleep(10)
+    print("Stopping server...")
     SRV.stop()
-    print("ende")
+    print("THE END")
 
 if __name__ == '__main__':
     main()
