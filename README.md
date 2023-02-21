@@ -48,7 +48,7 @@ go get ./...
 ## Usage
 ### Server
 ```bash
-python3 server.py
+python3 server.py --non_english --model base --task transcribe
 ```
 
 ### Client
