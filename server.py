@@ -80,8 +80,7 @@ class Server:
     def EmitConnected(self, client):
         if self.OnConnectedCallback:
             for callback in self.OnConnectedCallback:
-                thread = threading.Thread(target=callback, args=(client,))
-                thread.start()
+                callback(client)
 
 
     # create a new thread to handle the connection
@@ -91,7 +90,6 @@ class Server:
             self.conn = conn
             self.addr = addr
             self.timeout = timeout
-            self.thread = threading.Thread(target=self.__start)
 
             self.OnDisconnectedCallback = []
             self.OnTimeoutCallback = []
@@ -100,6 +98,7 @@ class Server:
         def start(self):
             if self.conn == None or self.running == True:
                 return
+            self.thread = threading.Thread(target=self.__start)
             self.thread.start()
 
         running = False
@@ -171,6 +170,16 @@ class Server:
                     thread.start()
 
 
+
+
+
+# The OnConnected event will be called when a client connects to the server
+# !!!IMPORTANT!!!
+# The OnConnected event will not be called in a new thread
+# If you block OnConnected, the server will not be able to accept new connections (deadlock)
+# This is because the server is waiting for the OnConnected event to finish, so the client events can be created
+# If you need to do something that takes a long time, create a new thread
+# !!!IMPORTANT!!!
 def OnConnected(client):
     print("Connected by", client.addr)
 
