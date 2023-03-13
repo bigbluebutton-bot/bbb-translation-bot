@@ -127,8 +127,10 @@ def main():
                     client = srv.clients[0]
                     if client:
                         try:
+                            tx = ""
                             for line in transcription:
-                                client.Send(str.encode(line))
+                                tx = tx + line
+                            client.Send(str.encode(tx))
                         except:
                             pass
 
