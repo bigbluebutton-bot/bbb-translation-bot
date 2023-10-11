@@ -2,12 +2,11 @@ import socket
 import threading
 import logging
 import time
-import uuid
 import inspect
 from concurrent.futures import ThreadPoolExecutor
 
 BUFFER_SIZE = 1024
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 
 
 class EventHandler:
@@ -21,7 +20,7 @@ class EventHandler:
     def add_event(self, callback):
         """Add a new event callback and return its unique ID."""
         with self._event_lock:
-            event_id = uuid.uuid4()
+            event_id = callback
             logging.debug(f"Adding event with ID: {event_id}")
             self._callbacks[event_id] = callback
             return event_id
