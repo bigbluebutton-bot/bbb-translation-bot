@@ -5,9 +5,21 @@ import time
 import inspect
 from concurrent.futures import ThreadPoolExecutor
 
-BUFFER_SIZE = 1024
-logging.basicConfig(level=logging.INFO)
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa, padding
+from cryptography.hazmat.primitives import hashes
+import os
 
+
+BUFFER_SIZE = 1024
+logging.basicConfig(level=logging.DEBUG)
+
+
+# Convert the byte string to a list of integers for logging
+def byte_string_to_int_list(byte_string):
+    return [byte for byte in byte_string]
 
 class EventHandler:
     """Class responsible for managing callbacks."""
@@ -51,7 +63,7 @@ class EventHandler:
 class Server:
     """Class representing a TCP server."""
 
-    def __init__(self, host, port, timeout=5, backlog=5, max_threads=10):
+    def __init__(self, host, port, timeout=5, encryption=False, backlog=5, max_threads=10):
         logging.debug("Initializing Server.")
         self.host = host
         self.port = port
@@ -66,10 +78,25 @@ class Server:
         self.main_accept_clients_thread = None
         self._thread_pool = None  # Delay the initialization of the ThreadPoolExecutor
         self.active_clients_count = 0
+        self._encryption = encryption
+        self.public_key = None
+        self.private_key = None
+
+    def generate_keys(self):
+        """Generate RSA keys."""
+        logging.debug("Generating RSA keys.")
+        self.private_key = rsa.generate_private_key(
+            public_exponent=65537,
+            key_size=self._encryption,
+        )
+        self.public_key = self.private_key.public_key()
 
 
     def start(self):
         """Start the server."""
+        if self._encryption:
+            self.generate_keys()
+
         logging.debug("Starting server.")
         if self._socket:
             logging.warning("Server already started.")
@@ -109,7 +136,7 @@ class Server:
                 conn, addr = self._socket.accept()
                 if conn and self._running:
                     logging.debug(f"Accepted client: {addr}")
-                    client = self._Client(self._remove_client, conn, addr, self.timeout)
+                    client = self._Client(self._remove_client, conn, addr, self.timeout, self._encryption, self.public_key, self.private_key)
                     with self._clients_lock:
                         self._clients.append(client)
                     self._connected_callbacks.emit(client)
@@ -183,7 +210,7 @@ class Server:
     class _Client:
         """Class representing a client."""
 
-        def __init__(self, on_remove, conn, addr, timeout=5):
+        def __init__(self, on_remove, conn, addr, timeout=5, encryption=False, public_key=None, private_key=None):
             logging.debug("Initializing Client.")
             self._on_remove = on_remove
             self.conn = conn
@@ -193,6 +220,13 @@ class Server:
             self._timeout_callbacks = EventHandler()
             self._message_callbacks = EventHandler()
             self._running = False
+            self._encryption = encryption
+
+            self.server_publickey = public_key
+            self.server_privatekey = private_key
+
+            self.client_key = None
+            self.client_initkey = None
 
         def start(self):
             """Start the client listener."""
@@ -201,7 +235,80 @@ class Server:
             if not self.conn or self._running:
                 return
             self._running = True
+
+            if self._encryption:
+                self._send_server_publickey()
+                self._listen_for_clientkey()
+
+            self.send(b"OK")
+
             self._listen()
+
+
+        def _listen_for_clientkey(self):
+            """Listen for the client's key."""
+            logging.debug(f"Client[{self.addr}] Listening for client key.")
+            data = self.conn.recv(BUFFER_SIZE)
+            if data:
+                logging.debug(f"Client[{self.addr}] Received client key: {byte_string_to_int_list(data)}")
+                init_and_key = self.server_privatekey.decrypt(
+                    data,
+                    padding.OAEP(
+                        mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                        algorithm=hashes.SHA256(),
+                        label=None
+                    )
+                )
+
+                self.client_initkey = init_and_key[:16] # the first 16 bytes are the init vector
+                self.client_key = init_and_key[16:]     # the rest is the key
+
+                logging.debug(f"Client[{self.addr}] Decrypted AES Key: {byte_string_to_int_list(self.client_key)}")
+                logging.debug(f"Client[{self.addr}] Decrypted AES IV: {byte_string_to_int_list(self.client_initkey)}")
+
+
+
+            else:
+                logging.debug(f"Client[{self.addr}] No data received. Closing connection.")
+                self.stop()
+
+
+        def _send_server_publickey(self):
+            """Send the server's public key to the client."""
+            logging.debug(f"Client[{self.addr}] Sending server public key.")
+
+            # Get server_publickey
+            server_publickey = self.server_publickey.public_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PublicFormat.SubjectPublicKeyInfo
+            )
+
+            # Send the encrypted AES key to the client
+            self.send(server_publickey)
+
+
+        def _decrypt(self, encrypted_data):
+            """Decrypt the received data."""
+            logging.debug(f"Client[{self.addr}] Decrypting data")
+            # Erstelle ein Cipher-Objekt
+            cipher = Cipher(algorithms.AES(self.client_key), modes.CFB(self.client_initkey), backend=default_backend())
+            # Erstelle ein Decryptor-Objekt
+            decryptor = cipher.decryptor()
+            # Entschlüssle die Daten
+            plaintext = decryptor.update(encrypted_data) + decryptor.finalize()
+            return plaintext
+        
+        def _encrypt(self, data):
+            """Encrypt the data to be sent."""
+            logging.debug(f"Client[{self.addr}] Encrypting data: {data}")
+            # Erstelle ein Cipher-Objekt
+            cipher = Cipher(algorithms.AES(self.client_key), modes.CFB(self.client_initkey), backend=default_backend())
+            # Erstelle ein Encryptor-Objekt
+            encryptor = cipher.encryptor()
+            # Verschlüssle die Daten
+            ciphertext = encryptor.update(data) + encryptor.finalize()
+            return ciphertext
+
 
         def _handle_socket_errors(self, error):
             """Centralize error handling for socket-related errors."""
@@ -213,11 +320,17 @@ class Server:
             logging.debug(f"Client[{self.addr}] Listening for data.")
             while self._running:
                 try:
-                    logging.debug(f"Client[{self.addr}] Waiting for data.")
+                    # logging.debug(f"Client[{self.addr}] Waiting for data.")
                     data = self.conn.recv(BUFFER_SIZE)
                     if data:
-                        logging.debug(f"Client[{self.addr}] Received data: {data}")
+                        # Decrypt the data if encryption is enabled
+                        if self._encryption:
+                            logging.debug(f"Client[{self.addr}] Received encrypted data: {byte_string_to_int_list(data)}")
+                            data = self._decrypt(data)
+                        
+                        logging.debug(f"Client[{self.addr}] Received data: {byte_string_to_int_list(data)}")
                         self._message_callbacks.emit(self, data)
+
                 except (socket.timeout, socket.error, OSError) as e:  # Merged the error handling
                     if isinstance(e, socket.timeout):
                         self._timeout_callbacks.emit(self)
@@ -246,6 +359,11 @@ class Server:
             """Send data to the client."""
             try:
                 logging.debug(f"Client[{self.addr}] Sending data: {data}")
+
+                # Encrypt the data if encryption is enabled
+                if self._encryption and self.client_key and self.client_initkey:
+                    data = self._encrypt(data)
+
                 self.conn.sendall(data)
             except (OSError, Exception) as e:
                 self._handle_socket_errors(e)
@@ -294,6 +412,7 @@ SECRET_TOKEN = "your_secret_token"
 
 def validate_token(client, data):
     """Check if the received token matches the secret token."""
+    print(data)
     if data.decode('utf-8') != SECRET_TOKEN:
         logging.warning(f"Invalid token from {client.addr}. Closing connection.")
         client.stop()
@@ -315,7 +434,7 @@ def on_connected(client):
     client.on_event("message", validate_token)
 
 def main():
-    srv = Server('localhost', 5000, 5, max_threads=20)
+    srv = Server('localhost', 5000, 5, 4096, 5, 10)
 
     srv.on_connected(on_connected)
 
