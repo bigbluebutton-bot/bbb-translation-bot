@@ -10,6 +10,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"net"
+	"time"
 )
 
 const (
@@ -56,7 +57,6 @@ func main() {
 		fmt.Println("Failed to encrypt AES key and IV:", err)
 		return
 	}
-
 	// Send encrypted AES key and IV to server
 	conn.Write(encryptedKeyIV)
 
@@ -93,4 +93,46 @@ func main() {
 
 	conn.Write(encryptedToken)
 	fmt.Println("Secret token sent to server!")
+
+	go func() {
+		// send ping every 4 seconds
+		for {
+			time.Sleep(4 * time.Second)
+			
+			stream := cipher.NewCFBEncrypter(blockCipher, aesIV)
+			pingmsg := "PING"
+			encryptedMessage := make([]byte, len(pingmsg))
+			stream.XORKeyStream(encryptedMessage, []byte(pingmsg))
+			conn.Write(encryptedMessage)
+			fmt.Println("Ping send to server!")
+
+
+			// wait for pong
+			messageBuffer := make([]byte, bufferSize)
+			n, err := conn.Read(messageBuffer)
+			if err != nil {
+				fmt.Println("Failed to read message from server:", err)
+				return
+			}
+			encrypted_message := messageBuffer[:n]
+			// Decrypt message with AES
+			blockCipher, err := aes.NewCipher(aesKey)
+			if err != nil {
+				fmt.Println("Failed to create AES cipher:", err)
+				return
+			}
+			stream = cipher.NewCFBDecrypter(blockCipher, aesIV)
+			message := make([]byte, len(encrypted_message))
+			stream.XORKeyStream(message, encrypted_message)
+
+			fmt.Println(string(message))
+			if string(message) != "PONG" {
+				fmt.Println("Server failed to decrypt AES key and IV")
+				return
+			}
+			fmt.Println("Pong received from server!")
+		}
+	}()
+
+	time.Sleep(30 * time.Second)
 }
