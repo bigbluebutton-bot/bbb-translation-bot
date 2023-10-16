@@ -215,18 +215,23 @@ class Server:
             self._on_remove = on_remove
             self.conn = conn
             self.conn.settimeout(timeout)
+            self._ping_timeout = timeout
             self.addr = addr
             self._disconnected_callbacks = EventHandler()
             self._timeout_callbacks = EventHandler()
             self._message_callbacks = EventHandler()
             self._running = False
             self._encryption = encryption
+            self._last_ping = 0
+            self._ping_callbacks = EventHandler()
 
             self.server_publickey = public_key
             self.server_privatekey = private_key
 
             self.client_key = None
             self.client_initkey = None
+
+            self._ping_message = b"PING"
 
         def start(self):
             """Start the client listener."""
@@ -236,41 +241,83 @@ class Server:
                 return
             self._running = True
 
+            self._reset_ping()
+
             if self._encryption:
                 self._send_server_publickey()
-                self._listen_for_clientkey()
+                if not self._listen_for_clientkey():    # if returns false = error
+                    return
 
             self.send(b"OK")
 
+            self._reset_ping()
+
             self._listen()
+
+
+        def _handle_ping(self):
+            """Handle the ping message."""
+            logging.debug(f"Received ping from {self.addr}")
+            self._reset_ping()
+            self._ping_callbacks.emit(self)
+            self.send(b"PONG")
+
+
+        def _reset_ping(self):
+            """Reset the ping timer."""
+            logging.debug(f"Client[{self.addr}] Resetting ping timer.")
+            self._last_ping = time.time()
+
+        def  _ping_timoeout(self):
+            """emit timeout and stop connection"""
+            logging.warning(f"Client[{self.addr}] Ping interval exceeded. Closing connection.")
+            self._timeout_callbacks.emit(self)
+            self.stop()
 
 
         def _listen_for_clientkey(self):
             """Listen for the client's key."""
             logging.debug(f"Client[{self.addr}] Listening for client key.")
-            data = self.conn.recv(BUFFER_SIZE)
-            if data:
-                logging.debug(f"Client[{self.addr}] Received client key: {byte_string_to_int_list(data)}")
-                init_and_key = self.server_privatekey.decrypt(
-                    data,
-                    padding.OAEP(
-                        mgf=padding.MGF1(algorithm=hashes.SHA256()),
-                        algorithm=hashes.SHA256(),
-                        label=None
-                    )
-                )
+            while self._running:
+                try:
+                    # timout test
+                    current_time = time.time()
+                    if current_time - self._last_ping > self._ping_timeout:  # seconds ping interval
+                        self._ping_timoeout()
+                        return False
 
-                self.client_initkey = init_and_key[:16] # the first 16 bytes are the init vector
-                self.client_key = init_and_key[16:]     # the rest is the key
+                    # Receive data from the client
+                    data = self.conn.recv(BUFFER_SIZE)
+                    if data:
+                        logging.debug(f"Client[{self.addr}] Received client key: {byte_string_to_int_list(data)}")
+                        init_and_key = self.server_privatekey.decrypt(
+                            data,
+                            padding.OAEP(
+                                mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                                algorithm=hashes.SHA256(),
+                                label=None
+                            )
+                        )
 
-                logging.debug(f"Client[{self.addr}] Decrypted AES Key: {byte_string_to_int_list(self.client_key)}")
-                logging.debug(f"Client[{self.addr}] Decrypted AES IV: {byte_string_to_int_list(self.client_initkey)}")
+                        self.client_initkey = init_and_key[:16] # the first 16 bytes are the init vector
+                        self.client_key = init_and_key[16:]     # the rest is the key
 
+                        logging.debug(f"Client[{self.addr}] Decrypted AES Key: {byte_string_to_int_list(self.client_key)}")
+                        logging.debug(f"Client[{self.addr}] Decrypted AES IV: {byte_string_to_int_list(self.client_initkey)}")
 
+                        return True
 
-            else:
-                logging.debug(f"Client[{self.addr}] No data received. Closing connection.")
-                self.stop()
+                    else:
+                        logging.debug(f"Client[{self.addr}] No data received. Closing connection.")
+                        self.stop()
+                        return False
+
+                except (socket.timeout, socket.error, OSError) as e:  # Merged the error handling
+                    if isinstance(e, socket.timeout):
+                        self._ping_timoeout()
+                    else:
+                        self._handle_socket_errors(e)
+                    return False
 
 
         def _send_server_publickey(self):
@@ -320,7 +367,13 @@ class Server:
             logging.debug(f"Client[{self.addr}] Listening for data.")
             while self._running:
                 try:
-                    # logging.debug(f"Client[{self.addr}] Waiting for data.")
+                    # timout test
+                    current_time = time.time()
+                    if current_time - self._last_ping > self._ping_timeout:  # seconds ping interval
+                        self._ping_timoeout()
+                        return
+
+                    # Receive data from the client
                     data = self.conn.recv(BUFFER_SIZE)
                     if data:
                         # Decrypt the data if encryption is enabled
@@ -329,12 +382,17 @@ class Server:
                             data = self._decrypt(data)
                         
                         logging.debug(f"Client[{self.addr}] Received data: {byte_string_to_int_list(data)}")
-                        self._message_callbacks.emit(self, data)
+
+                        if data == self._ping_message:
+                            self._handle_ping()
+                        else:
+                            self._message_callbacks.emit(self, data)
 
                 except (socket.timeout, socket.error, OSError) as e:  # Merged the error handling
                     if isinstance(e, socket.timeout):
-                        self._timeout_callbacks.emit(self)
-                    self._handle_socket_errors(e)
+                        self._ping_timoeout()
+                    else:
+                        self._handle_socket_errors(e)
 
         def stop(self):
             """Stop the client and close its connection."""
@@ -391,6 +449,11 @@ class Server:
                     return self._message_callbacks.add_event(callback)
                 else:
                     logging.error(f"Invalid number of parameters for 'message' event. Expected 2, got {num_params}.")
+            elif event_type == "ping":
+                if num_params == 1:
+                    return self._ping_callbacks.add_event(callback)
+                else:
+                    logging.error(f"Invalid number of parameters for 'ping' event. Expected 1, got {num_params}.")
             else:
                 logging.warning(f"Unsupported event type: {event_type}")
 
@@ -403,6 +466,8 @@ class Server:
                 self._timeout_callbacks.remove_event(event_id)
             elif event_type == "message":
                 self._message_callbacks.remove_event(event_id)
+            elif event_type == "ping":
+                self._ping_callbacks.remove_event(event_id)
             else:
                 logging.warning(f"Unsupported event type: {event_type}")
 
@@ -429,9 +494,10 @@ def handle_client_message(client, data):
 def on_connected(client):
     """Handle new client connection."""
     logging.info(f"Connected by {client.addr}")
-    client.on_event("disconnected", lambda c: logging.info(f"Disconnected by {client.addr}"))
-    client.on_event("timeout", lambda c: logging.info(f"Timeout by {client.addr}"))
+    client.on_event("disconnected", lambda c: logging.info(f"Disconnected by {c.addr}"))
+    client.on_event("timeout", lambda c: logging.info(f"Timeout by {c.addr}"))
     client.on_event("message", validate_token)
+    client.on_event("ping", lambda c: logging.info(f"Ping from {c.addr}"))
 
 def main():
     srv = Server('localhost', 5000, 5, 4096, 5, 10)
