@@ -312,7 +312,7 @@ class Server:
                         self.stop()
                         return False
 
-                except (socket.timeout, socket.error, OSError) as e:  # Merged the error handling
+                except (socket.timeout, socket.error, OSError, Exception) as e:  # Merged the error handling
                     if isinstance(e, socket.timeout):
                         self._ping_timoeout()
                     else:
@@ -337,22 +337,22 @@ class Server:
         def _decrypt(self, encrypted_data):
             """Decrypt the received data."""
             logging.debug(f"Client[{self.addr}] Decrypting data")
-            # Erstelle ein Cipher-Objekt
+
             cipher = Cipher(algorithms.AES(self.client_key), modes.CFB(self.client_initkey), backend=default_backend())
-            # Erstelle ein Decryptor-Objekt
+
             decryptor = cipher.decryptor()
-            # Entschlüssle die Daten
+
             plaintext = decryptor.update(encrypted_data) + decryptor.finalize()
             return plaintext
         
         def _encrypt(self, data):
             """Encrypt the data to be sent."""
             logging.debug(f"Client[{self.addr}] Encrypting data: {data}")
-            # Erstelle ein Cipher-Objekt
+
             cipher = Cipher(algorithms.AES(self.client_key), modes.CFB(self.client_initkey), backend=default_backend())
-            # Erstelle ein Encryptor-Objekt
+
             encryptor = cipher.encryptor()
-            # Verschlüssle die Daten
+
             ciphertext = encryptor.update(data) + encryptor.finalize()
             return ciphertext
 
@@ -478,13 +478,17 @@ SECRET_TOKEN = "your_secret_token"
 def validate_token(client, data):
     """Check if the received token matches the secret token."""
     print(data)
-    if data.decode('utf-8') != SECRET_TOKEN:
-        logging.warning(f"Invalid token from {client.addr}. Closing connection.")
+    try:
+        if data.decode('utf-8') != SECRET_TOKEN:
+            logging.warning(f"Invalid token from {client.addr}. Closing connection.")
+            client.stop()
+        else:
+            logging.info(f"Valid token received from {client.addr}. Connection authorized.")
+            client.remove_event("message", validate_token)
+            client.on_event("message", handle_client_message)
+    except Exception as e:
+        logging.error(f"Error while validating token: {e}")
         client.stop()
-    else:
-        logging.info(f"Valid token received from {client.addr}. Connection authorized.")
-        client.remove_event("message", validate_token)
-        client.on_event("message", handle_client_message)
 
 def handle_client_message(client, data):
     """Handle received message after token validation."""
