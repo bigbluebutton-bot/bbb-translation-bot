@@ -52,6 +52,14 @@ func NewClient(addr string, encryption bool) *Client {
 	}
 }
 
+func (c *Client) GetAESkey() []byte {
+	return c.aesKey
+}
+
+func (c *Client) GetAESiv() []byte {
+	return c.aesIV
+}
+
 func (c *Client) Send(message string) error {
 	c.msgSendLock.Lock()
 	defer c.msgSendLock.Unlock()
