@@ -5,50 +5,7 @@ import (
 	"crypto/cipher"
 	"fmt"
 	"net"
-	"os"
 )
-
-
-func main() {
-	aesKey := []byte{
-		0xe8, 0xab, 0x8d, 0x5d, 0x22, 0xfe, 0x15, 0xf0,
-		0x4a, 0x48, 0x30, 0x7b, 0xd0, 0x6c, 0x10, 0xaa,
-		0x84, 0x3c, 0x87, 0xab, 0x72, 0x8a, 0x24, 0x7d,
-		0x94, 0x76, 0x4c, 0x9b, 0x6a, 0x64, 0x00, 0x34,
-	}
-	aesIV := []byte{
-		0xe0, 0xab, 0x95, 0x32, 0x7e, 0x3a, 0xa1, 0x3d,
-		0x20, 0x34, 0x62, 0xa8, 0x09, 0xa3, 0x71, 0x9e,
-	}
-
-
-	client := NewUDPclient("localhost:5001", aesKey, aesIV)
-
-
-	err := client.Connect()
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
-	defer client.Close()
-
-	client.Encrypted = true // setting encryption to true
-	err = client.SendMessage([]byte("Hello, encrypted server!"))
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
-
-	fmt.Println("Message sent to server.")
-}
-
-
-
-
-
-
-
-
 
 
 type UDPclient struct {
@@ -59,11 +16,12 @@ type UDPclient struct {
 	Encrypted  bool
 }
 
-func NewUDPclient(serverAddr string, aeskey, aesiv []byte) *UDPclient {
+func NewUDPclient(serverAddr string, encrypted bool, aeskey, aesiv []byte) *UDPclient {
 	return &UDPclient{
 		serverAddr: serverAddr,
 		aesKey:     aeskey,
 		aesIV:      aesiv,
+		Encrypted: encrypted,
 	}
 }
 

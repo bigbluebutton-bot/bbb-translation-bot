@@ -14,59 +14,6 @@ import (
 	"time"
 )
 
-
-
-
-
-func main() {
-	client := NewClient("localhost:5000", true)
-
-	client.AddEventHandler("connected", func(message string) {
-		fmt.Println("Connected event:", message)
-	})
-
-	client.AddEventHandler("disconnected", func(message string) {
-		fmt.Println("Disconnected event:", message)
-	})
-
-	client.AddEventHandler("message", func(message string) {
-		fmt.Println("Message event:", message)
-	})
-
-	client.AddEventHandler("timeout", func(message string) {
-		fmt.Println("Timeout event:", message)
-	})
-
-	client.AddEventHandler("ping", func(message string) {
-		fmt.Println("Ping event:", message)
-	})
-
-	err := client.Connect()
-	if err != nil {
-		fmt.Println("Failed to connect to the server:", err)
-		return
-	}
-	defer client.disconnect()
-
-	err = client.Send("Hello from the client!")
-	if err != nil {
-		fmt.Println("Failed to send message:", err)
-		return
-	}
-
-	time.Sleep(15 * time.Second)
-}
-
-
-
-
-
-
-
-
-
-
-
 type Client struct {
 	address     string
 	connection  net.Conn
@@ -81,6 +28,8 @@ type Client struct {
 	BufferSize  int
 	PingTimeIntervall time.Duration
 	StopChan chan bool
+
+	Secret_token string
 }
 
 func NewClient(addr string, encryption bool) *Client {
@@ -98,6 +47,8 @@ func NewClient(addr string, encryption bool) *Client {
 		BufferSize:   1024,
 		PingTimeIntervall: 4 * time.Second,
 		StopChan: make(chan bool),
+
+		Secret_token: "",
 	}
 }
 
@@ -212,7 +163,7 @@ func (c *Client) Connect() error {
 	onmsgmutex.Lock()
 	defer onmsgmutex.Unlock()
 	// Send secret token to server
-	if err := c.Send("your_secret_token"); err != nil {
+	if err := c.Send(c.Secret_token); err != nil {
 		return err
 	}
 
