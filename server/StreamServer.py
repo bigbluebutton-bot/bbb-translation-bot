@@ -112,7 +112,7 @@ class StreamServer:
         udpserver.start()
 
         # send udp port to client in json format
-        jsondata = json.dumps({"type": "init_udpaddr", "msg": {"udp": {"host": self.host, "port": selectedtport}}}).encode()
+        jsondata = json.dumps({"type": "init_udpaddr", "msg": {"udp": {"host": self.host, "port": selectedtport, "encryption": udpencryption}}}).encode()
         client.send(jsondata)
 
         # emit on_connected event
