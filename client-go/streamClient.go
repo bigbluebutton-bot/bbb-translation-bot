@@ -13,6 +13,8 @@ type StreamClient struct {
 	udpClient  *UDPclient
 	serverHost string
 	serverPort int
+
+	connectedEvent *Event
 }
 
 func NewStreamClient(host string, port int, useEncryption bool, secretToken string) *StreamClient {
@@ -23,6 +25,8 @@ func NewStreamClient(host string, port int, useEncryption bool, secretToken stri
 		tcpClient:  tcpClient,
 		serverHost: host,
 		serverPort: port,
+
+		connectedEvent: NewEvent(),
 	}
 }
 
@@ -75,7 +79,7 @@ func (sc *StreamClient) Connect() error {
 				Msg struct {
 					UDP struct {
 						Host       string `json:"host"`
-						Port       int `json:"port"`
+						Port       int    `json:"port"`
 						Encryption bool   `json:"encryption"`
 					} `json:"udp"`
 				} `json:"msg"`
@@ -99,12 +103,12 @@ func (sc *StreamClient) Connect() error {
 			sc.udpClient = udpClient
 		}
 
-		sc.tcpClient.RemoveEventHandler("message", init_udpserver)
+		sc.tcpClient.RemoveOnMessage(init_udpserver)
 
 		onmsgmutex.Unlock()
 	}
 
-	sc.tcpClient.AddEventHandler("message", init_udpserver)
+	sc.tcpClient.OnMessage(init_udpserver)
 
 	err := sc.tcpClient.Connect()
 	if err != nil {
@@ -113,6 +117,8 @@ func (sc *StreamClient) Connect() error {
 
 	onmsgmutex.Lock()
 	defer onmsgmutex.Unlock()
+
+	sc.connectedEvent.Emit("connected")
 
 	return nil
 }
@@ -137,10 +143,38 @@ func (sc *StreamClient) Close() {
 	}
 }
 
+func (sc *StreamClient) OnConnected(handler func(message string)) {
+	sc.connectedEvent.Add(handler)
+}
+
+func (sc *StreamClient) RemoveOnConnected(handler func(message string)) {
+	sc.connectedEvent.Remove(handler)
+}
+
 func (sc *StreamClient) OnTCPMessage(handler func(message string)) {
-	sc.tcpClient.AddEventHandler("message", handler)
+	sc.tcpClient.OnMessage(handler)
 }
 
 func (sc *StreamClient) RemoveOnTCPMessage(handler func(message string)) {
-	sc.tcpClient.RemoveEventHandler("message", handler)
+	sc.tcpClient.RemoveOnMessage(handler)
+}
+
+// on disconnected
+func (sc *StreamClient) OnDisconnected(handler func(message string)) {
+	sc.tcpClient.OnDisconnected(handler)
+}
+
+// remove on disconnected
+func (sc *StreamClient) RemoveOnDisconnected(handler func(message string)) {
+	sc.tcpClient.RemoveOnDisconnected(handler)
+}
+
+// on timeout
+func (sc *StreamClient) OnTimeout(handler func(message string)) {
+	sc.tcpClient.OnTimeout(handler)
+}
+
+// remove on timeout
+func (sc *StreamClient) RemoveOnTimeout(handler func(message string)) {
+	sc.tcpClient.RemoveOnTimeout(handler)
 }

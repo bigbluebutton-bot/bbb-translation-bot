@@ -17,9 +17,7 @@ import (
 type TCPclient struct {
 	address           string
 	connection        net.Conn
-	eventLock         sync.Mutex
 	msgSendLock       sync.Mutex
-	eventHandlers     map[string][]func(message string)
 	aesKey            []byte
 	aesIV             []byte
 	running           bool
@@ -30,15 +28,19 @@ type TCPclient struct {
 	StopChan          chan bool
 
 	Secret_token string
+
+	messageEvent      *Event
+	connectedEvent    *Event
+	disconnectedEvent *Event
+	timeoutEvent      *Event
+	pingEvent         *Event
 }
 
 func NewTCPclient(addr string, encryption bool) *TCPclient {
 	return &TCPclient{
 		address:           addr,
 		connection:        nil,
-		eventLock:         sync.Mutex{},
 		msgSendLock:       sync.Mutex{},
-		eventHandlers:     make(map[string][]func(message string)),
 		aesKey:            nil,
 		aesIV:             nil,
 		running:           false,
@@ -49,6 +51,12 @@ func NewTCPclient(addr string, encryption bool) *TCPclient {
 		StopChan:          make(chan bool),
 
 		Secret_token: "",
+
+		messageEvent:      NewEvent(),
+		connectedEvent:    NewEvent(),
+		disconnectedEvent: NewEvent(),
+		timeoutEvent:      NewEvent(),
+		pingEvent:         NewEvent(),
 	}
 }
 
@@ -149,10 +157,10 @@ func (c *TCPclient) Connect() error {
 			c.Close()
 		}
 		fmt.Println("Received message from server:", message)
-		c.RemoveEventHandler("message", onmsg)
+		c.messageEvent.Remove(onmsg)
 		onmsgmutex.Unlock()
 	}
-	c.AddEventHandler("message", onmsg)
+	c.messageEvent.Remove(onmsg)
 
 	if c.encryptionEnabled {
 		err := c.exchangeKeys()
@@ -177,36 +185,7 @@ func (c *TCPclient) Connect() error {
 func (c *TCPclient) Close() {
 	c.StopChan <- true
 	c.connection.Close()
-	c.emit("disconnected", "Disconnected from the server.")
-}
-
-func (c *TCPclient) emit(eventType, message string) {
-	c.eventLock.Lock()
-	defer c.eventLock.Unlock()
-	if handlers, ok := c.eventHandlers[eventType]; ok {
-		for _, handler := range handlers {
-			go handler(message)
-		}
-	}
-}
-
-func (c *TCPclient) AddEventHandler(eventType string, handler func(message string)) {
-	c.eventLock.Lock()
-	defer c.eventLock.Unlock()
-	c.eventHandlers[eventType] = append(c.eventHandlers[eventType], handler)
-}
-
-func (c *TCPclient) RemoveEventHandler(eventType string, handlerToRemove func(message string)) {
-	c.eventLock.Lock()
-	defer c.eventLock.Unlock()
-	if handlers, ok := c.eventHandlers[eventType]; ok {
-		for i, handler := range handlers {
-			if fmt.Sprintf("%p", handler) == fmt.Sprintf("%p", handlerToRemove) {
-				c.eventHandlers[eventType] = append(handlers[:i], handlers[i+1:]...)
-				break
-			}
-		}
-	}
+	c.disconnectedEvent.Emit("Disconnected from the server.")
 }
 
 // Receve messages from the server
@@ -219,7 +198,8 @@ func (c *TCPclient) receive() {
 			messageBuffer := make([]byte, c.BufferSize)
 			n, err := c.connection.Read(messageBuffer)
 			if err != nil {
-				c.emit("timeout", "Connection timed out.")
+				c.timeoutEvent.Emit("Connection timed out.")
+				c.Close()
 				return
 			}
 			message := messageBuffer[:n]
@@ -236,11 +216,11 @@ func (c *TCPclient) receive() {
 			}
 
 			if string(message) == "PONG" {
-				c.emit("ping", string(message))
+				c.pingEvent.Emit(string(message))
 				continue
 			}
 
-			c.emit("message", string(message))
+			c.messageEvent.Emit(string(message))
 		}
 	}
 }
@@ -260,4 +240,36 @@ func (c *TCPclient) sendPing() {
 			}
 		}
 	}
+}
+
+func (c *TCPclient) OnConnected(handler func(message string)) {
+	c.connectedEvent.Add(handler)
+}
+
+func (c *TCPclient) RemoveOnConnected(handler func(message string)) {
+	c.connectedEvent.Remove(handler)
+}
+
+func (c *TCPclient) OnMessage(handler func(message string)) {
+	c.messageEvent.Add(handler)
+}
+
+func (c *TCPclient) RemoveOnMessage(handler func(message string)) {
+	c.messageEvent.Remove(handler)
+}
+
+func (c *TCPclient) OnDisconnected(handler func(message string)) {
+	c.disconnectedEvent.Add(handler)
+}
+
+func (c *TCPclient) RemoveOnDisconnected(handler func(message string)) {
+	c.disconnectedEvent.Remove(handler)
+}
+
+func (c *TCPclient) OnTimeout(handler func(message string)) {
+	c.timeoutEvent.Add(handler)
+}
+
+func (c *TCPclient) RemoveOnTimeout(handler func(message string)) {
+	c.timeoutEvent.Remove(handler)
 }

@@ -9,6 +9,18 @@ import (
 func main() {
 	sc := NewStreamClient("localhost", 5000, true, "your_secret_token")
 
+	sc.OnConnected(func(message string) {
+		fmt.Println("Connected to server.")
+	})
+
+	sc.OnDisconnected(func(message string) {
+		fmt.Println("Disconnected from server.")
+	})
+
+	sc.OnTimeout(func(message string) {
+		fmt.Println("Connection to server timed out.")
+	})
+
 	sc.OnTCPMessage(func(message string) {
 		fmt.Println("TCP message event:", message)
 	})
