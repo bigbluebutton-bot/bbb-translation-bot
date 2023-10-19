@@ -139,11 +139,15 @@ func (c *TCPclient) exchangeKeys() error {
 }
 
 func (c *TCPclient) Connect() error {
+	c.StopChan = make(chan bool)
+
 	var err error
 	c.connection, err = net.Dial("tcp", c.address)
 	if err != nil {
 		return err
 	}
+
+	c.running = true
 
 	go c.receive()
 
@@ -183,7 +187,11 @@ func (c *TCPclient) Connect() error {
 }
 
 func (c *TCPclient) Close() {
-	c.StopChan <- true
+	if !c.running {
+		return
+	}
+	c.running = false
+	close(c.StopChan)
 	c.connection.Close()
 	c.disconnectedEvent.Emit("Disconnected from the server.")
 }

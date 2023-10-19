@@ -120,6 +120,13 @@ func (sc *StreamClient) Connect() error {
 
 	sc.connectedEvent.Emit("connected")
 
+	sc.OnTimeout(func(message string) {
+		sc.Close()
+	})
+	sc.OnDisconnected(func(message string) {
+		sc.Close()
+	})
+
 	return nil
 }
 
