@@ -136,7 +136,8 @@ class StreamServer:
         """Private method to remove a client from the server's client list."""
         logging.debug(f"Removing client: {streamclient.tcpclient.addr}")
         with self.udpservers_lock:
-            self.udpserver_tcpclient_list.remove(streamclient)
+            if streamclient in self.udpserver_tcpclient_list:
+                self.udpserver_tcpclient_list.remove(streamclient)
         with self.udpports_lock:
             self.udpports.discard(streamclient.udpserver.port)
 
