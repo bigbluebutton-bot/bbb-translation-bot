@@ -160,7 +160,7 @@ func (c *TCPclient) Connect() error {
 		c.messageEvent.Remove(onmsg)
 		onmsgmutex.Unlock()
 	}
-	c.messageEvent.Remove(onmsg)
+	c.messageEvent.Add(onmsg)
 
 	if c.encryptionEnabled {
 		err := c.exchangeKeys()
@@ -219,6 +219,8 @@ func (c *TCPclient) receive() {
 				c.pingEvent.Emit(string(message))
 				continue
 			}
+
+			fmt.Println("MSG", string(message))
 
 			c.messageEvent.Emit(string(message))
 		}
