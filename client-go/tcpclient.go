@@ -14,53 +14,53 @@ import (
 	"time"
 )
 
-type Client struct {
-	address     string
-	connection  net.Conn
-	eventLock   sync.Mutex
-	msgSendLock sync.Mutex
-	eventHandlers map[string][]func(message string)
-	aesKey      []byte
-	aesIV       []byte
-	running     bool
+type TCPclient struct {
+	address           string
+	connection        net.Conn
+	eventLock         sync.Mutex
+	msgSendLock       sync.Mutex
+	eventHandlers     map[string][]func(message string)
+	aesKey            []byte
+	aesIV             []byte
+	running           bool
 	encryptionEnabled bool
 	serverPublicKey   *rsa.PublicKey
-	BufferSize  int
+	BufferSize        int
 	PingTimeIntervall time.Duration
-	StopChan chan bool
+	StopChan          chan bool
 
 	Secret_token string
 }
 
-func NewClient(addr string, encryption bool) *Client {
-	return &Client{
-		address:      addr,
-		connection:   nil,
-		eventLock:    sync.Mutex{},
-		msgSendLock:  sync.Mutex{},
-		eventHandlers: make(map[string][]func(message string)),
-		aesKey:       nil,
-		aesIV:        nil,
-		running:      false,
+func NewTCPclient(addr string, encryption bool) *TCPclient {
+	return &TCPclient{
+		address:           addr,
+		connection:        nil,
+		eventLock:         sync.Mutex{},
+		msgSendLock:       sync.Mutex{},
+		eventHandlers:     make(map[string][]func(message string)),
+		aesKey:            nil,
+		aesIV:             nil,
+		running:           false,
 		encryptionEnabled: encryption,
-		serverPublicKey: nil,
-		BufferSize:   1024,
+		serverPublicKey:   nil,
+		BufferSize:        1024,
 		PingTimeIntervall: 4 * time.Second,
-		StopChan: make(chan bool),
+		StopChan:          make(chan bool),
 
 		Secret_token: "",
 	}
 }
 
-func (c *Client) GetAESkey() []byte {
+func (c *TCPclient) GetAESkey() []byte {
 	return c.aesKey
 }
 
-func (c *Client) GetAESiv() []byte {
+func (c *TCPclient) GetAESiv() []byte {
 	return c.aesIV
 }
 
-func (c *Client) Send(message string) error {
+func (c *TCPclient) Send(message string) error {
 	c.msgSendLock.Lock()
 	defer c.msgSendLock.Unlock()
 
@@ -70,16 +70,15 @@ func (c *Client) Send(message string) error {
 			fmt.Println("Failed to create AES cipher:", err)
 			return err
 		}
-		
+
 		// Encrypt SECRET_TOKEN with AES and send to server for validation
 		stream := cipher.NewCFBEncrypter(blockCipher, c.aesIV)
 		encryptedToken := make([]byte, len(message))
 		stream.XORKeyStream(encryptedToken, []byte(message))
 		fmt.Println("plaintext bytes: ", []byte(message))
 		fmt.Println("encryptedToken: ", encryptedToken)
-		
+
 		c.connection.Write(encryptedToken)
-		fmt.Println("Secret token sent to server!")
 	} else {
 		_, err := c.connection.Write([]byte(message))
 		if err != nil {
@@ -89,7 +88,7 @@ func (c *Client) Send(message string) error {
 	return nil
 }
 
-func (c *Client) exchangeKeys() error {
+func (c *TCPclient) exchangeKeys() error {
 	// Receive public key from server
 	keyBuffer := make([]byte, c.BufferSize)
 	n, err := c.connection.Read(keyBuffer)
@@ -131,7 +130,7 @@ func (c *Client) exchangeKeys() error {
 	return nil
 }
 
-func (c *Client) Connect() error {
+func (c *TCPclient) Connect() error {
 	var err error
 	c.connection, err = net.Dial("tcp", c.address)
 	if err != nil {
@@ -147,7 +146,7 @@ func (c *Client) Connect() error {
 	var onmsg func(message string)
 	onmsg = func(message string) {
 		if message != "OK" {
-			c.disconnect()
+			c.Close()
 		}
 		fmt.Println("Received message from server:", message)
 		c.RemoveEventHandler("message", onmsg)
@@ -155,18 +154,12 @@ func (c *Client) Connect() error {
 	}
 	c.AddEventHandler("message", onmsg)
 
-
-
 	if c.encryptionEnabled {
 		err := c.exchangeKeys()
 		if err != nil {
 			return err
 		}
 	}
-
-
-
-
 
 	onmsgmutex.Lock()
 	defer onmsgmutex.Unlock()
@@ -181,12 +174,13 @@ func (c *Client) Connect() error {
 	return nil
 }
 
-func (c *Client) disconnect() {
+func (c *TCPclient) Close() {
+	c.StopChan <- true
 	c.connection.Close()
 	c.emit("disconnected", "Disconnected from the server.")
 }
 
-func (c *Client) emit(eventType, message string) {
+func (c *TCPclient) emit(eventType, message string) {
 	c.eventLock.Lock()
 	defer c.eventLock.Unlock()
 	if handlers, ok := c.eventHandlers[eventType]; ok {
@@ -196,13 +190,13 @@ func (c *Client) emit(eventType, message string) {
 	}
 }
 
-func (c *Client) AddEventHandler(eventType string, handler func(message string)) {
+func (c *TCPclient) AddEventHandler(eventType string, handler func(message string)) {
 	c.eventLock.Lock()
 	defer c.eventLock.Unlock()
 	c.eventHandlers[eventType] = append(c.eventHandlers[eventType], handler)
 }
 
-func (c *Client) RemoveEventHandler(eventType string, handlerToRemove func(message string)) {
+func (c *TCPclient) RemoveEventHandler(eventType string, handlerToRemove func(message string)) {
 	c.eventLock.Lock()
 	defer c.eventLock.Unlock()
 	if handlers, ok := c.eventHandlers[eventType]; ok {
@@ -216,7 +210,7 @@ func (c *Client) RemoveEventHandler(eventType string, handlerToRemove func(messa
 }
 
 // Receve messages from the server
-func (c *Client) receive() {
+func (c *TCPclient) receive() {
 	for {
 		select {
 		case <-c.StopChan:
@@ -252,7 +246,7 @@ func (c *Client) receive() {
 }
 
 // Will send a ping every PingTimeIntervall seconds
-func (c *Client) sendPing() {
+func (c *TCPclient) sendPing() {
 	for {
 		select {
 		case <-c.StopChan:
