@@ -164,6 +164,10 @@ class Server:
 
     def stop(self):
         """Stop the server."""
+        if not self._running:
+            logging.warning("Server already stopped.")
+            return
+
         logging.debug("Stopping server.")
 
         self._running = False
@@ -443,6 +447,10 @@ class Server:
 
         def stop(self):
             """Stop the client and close its connection."""
+            if not self._running:
+                logging.warning(f"Client[{self.addr}] already stopped.")
+                return
+
             logging.debug(f"Client[{self.addr}] Stopping client.")
             self._running = False
 

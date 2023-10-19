@@ -59,7 +59,7 @@ class EventHandler:
 
 
 
-class UDPServer:
+class Server:
     def __init__(self, host, port, encryption=False, aes_key=5, aes_initkey=5):
         logging.debug("Initializing Server.")
         self.host = host
@@ -108,6 +108,10 @@ class UDPServer:
                 self._handle_socket_errors(e)
 
     def stop(self):
+        """Stop the server."""
+        if not self._running:
+            logging.warning("Server already stopped.")
+            return
         self._running = False
         self._socket.close()
         self._main_thread.join()
@@ -151,7 +155,7 @@ def main():
     aes_initkey = os.urandom(16) # Generate a random 16 bytes AES init key
     print(f"AES Key: {aes_key}")
     print(f"AES Init Key: {aes_initkey}")
-    srv =  UDPServer('localhost', 5001, True, aes_key, aes_initkey)
+    srv =  Server('localhost', 5001, True, aes_key, aes_initkey)
 
     srv.whitelist = ['127.0.0.1']
 
