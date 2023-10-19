@@ -172,12 +172,15 @@ class StreamServer:
             self.tcpclient.on_event("disconnected", lambda c: self.stop())
             self.tcpclient.on_event("timeout", lambda c: self.stop())
 
-        def send(self, data):
+        def sendTCP(self, data):
             jsondata = json.dumps({"type": "msg", "msg": data}).encode()
-            self.udpserver.send(data)
+            self.tcpclient.send(jsondata)
 
-        def on_message(self, callback):
+        def on_TCPmessage(self, callback):
             self.tcpclient.on_event("message", callback)
+
+        def on_UDPmessage(self, callback):
+            self.udpserver.on_event("message", callback)
 
         def stop(self):
             self.tcpclient.stop()
@@ -192,7 +195,9 @@ class StreamServer:
 
 def on_connected(streamclient):
     print(f"Connected by {streamclient.tcpclient.addr}")
-    streamclient.on_message(lambda c, d: print(f"Received message from {c.addr}: {d}"))
+    streamclient.on_TCPmessage(lambda c, d: print(f"Received TCP message from {c.addr}: {d}"))
+    streamclient.on_UDPmessage(lambda a, d: print(f"Received UDP message from {a}: {d}"))
+    streamclient.sendTCP("Hello from server!")
 
 
 def main():
