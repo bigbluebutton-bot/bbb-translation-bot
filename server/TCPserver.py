@@ -137,10 +137,10 @@ class Server:
                 conn, addr = self._socket.accept()
                 if conn and self._running:
                     logging.debug(f"Accepted client: {addr}")
-                    client = self._Client(self._remove_client, conn, addr, self.timeout, self._encryption, self.public_key, self.private_key, self.secretToken, self.buffer_size)
+                    client = self._Client(self._remove_client, self._connected_callbacks, conn, addr, self.timeout, self._encryption, self.public_key, self.private_key, self.secretToken, self.buffer_size)
                     with self._clients_lock:
                         self._clients.append(client)
-                    self._connected_callbacks.emit(client)
+
                     logging.debug(f"Thread: Starting for client: {addr}")
                     self._thread_pool.submit(client.start)  # Use the thread pool to handle clients
                     self.active_clients_count += 1  # Increment counter here
@@ -215,9 +215,10 @@ class Server:
     class _Client:
         """Class representing a client."""
 
-        def __init__(self, on_remove, conn, addr, timeout=5, encryption=False, public_key=None, private_key=None, secretToken="", buffer_size=1024):
+        def __init__(self, on_remove, _connected_callbacks, conn, addr, timeout=5, encryption=False, public_key=None, private_key=None, secretToken="", buffer_size=1024):
             logging.debug("Initializing Client.")
             self._on_remove = on_remove
+            self._connected_callbacks = _connected_callbacks
             self.conn = conn
             self.conn.settimeout(timeout)
             self._ping_timeout = timeout
@@ -266,6 +267,8 @@ class Server:
                 return
             
             logging.info(f"Valid token received from {self.addr}. Connection authorized.")
+
+            self._connected_callbacks.emit(self)
 
             self._listen()
 
