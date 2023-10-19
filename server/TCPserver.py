@@ -13,7 +13,6 @@ from cryptography.hazmat.primitives import hashes
 import os
 
 
-BUFFER_SIZE = 1024
 logging.basicConfig(level=logging.DEBUG)
 
 
@@ -63,7 +62,7 @@ class EventHandler:
 class Server:
     """Class representing a TCP server."""
 
-    def __init__(self, host, port, timeout=5, encryption=False, backlog=5, max_threads=10):
+    def __init__(self, host, port, timeout=5, encryption=False, backlog=5, max_threads=10, secretToken="", buffer_size=1024):
         logging.debug("Initializing Server.")
         self.host = host
         self.port = port
@@ -81,6 +80,8 @@ class Server:
         self._encryption = encryption
         self.public_key = None
         self.private_key = None
+        self.secretToken = secretToken
+        self.buffer_size = buffer_size
 
     def generate_keys(self):
         """Generate RSA keys."""
@@ -136,7 +137,7 @@ class Server:
                 conn, addr = self._socket.accept()
                 if conn and self._running:
                     logging.debug(f"Accepted client: {addr}")
-                    client = self._Client(self._remove_client, conn, addr, self.timeout, self._encryption, self.public_key, self.private_key)
+                    client = self._Client(self._remove_client, conn, addr, self.timeout, self._encryption, self.public_key, self.private_key, self.secretToken, self.buffer_size)
                     with self._clients_lock:
                         self._clients.append(client)
                     self._connected_callbacks.emit(client)
@@ -210,7 +211,7 @@ class Server:
     class _Client:
         """Class representing a client."""
 
-        def __init__(self, on_remove, conn, addr, timeout=5, encryption=False, public_key=None, private_key=None):
+        def __init__(self, on_remove, conn, addr, timeout=5, encryption=False, public_key=None, private_key=None, secretToken="", buffer_size=1024):
             logging.debug("Initializing Client.")
             self._on_remove = on_remove
             self.conn = conn
@@ -233,6 +234,9 @@ class Server:
 
             self._ping_message = b"PING"
 
+            self.secretToken = secretToken
+            self.buffer_size = buffer_size
+
         def start(self):
             """Start the client listener."""
             logging.debug(f"Client[{self.addr}] Starting client.")
@@ -252,7 +256,50 @@ class Server:
 
             self._reset_ping()
 
+            if not self._validate_token():
+                logging.warning(f"Invalid token from {self.addr}. Closing connection.")
+                self.stop()
+                return
+            
+            logging.info(f"Valid token received from {self.addr}. Connection authorized.")
+
             self._listen()
+
+
+        def _validate_token(self):
+            """Validate the token sent by the client."""
+            logging.debug(f"Client[{self.addr}] Validating token.")
+            while self._running:
+                try:
+                    # timout test
+                    current_time = time.time()
+                    if current_time - self._last_ping > self._ping_timeout:  # seconds ping interval
+                        self._ping_timoeout()
+                        return False
+
+                    # Receive data from the client
+                    data = self.conn.recv(self.buffer_size)
+                    if data:
+                        # Decrypt the data if encryption is enabled
+                        if self._encryption:
+                            logging.debug(f"Client[{self.addr}] Received encrypted data: {byte_string_to_int_list(data)}")
+                            data = self._decrypt(data)
+
+                        logging.debug(f"Client[{self.addr}] Received data: {byte_string_to_int_list(data)}")
+
+                        if data.decode('utf-8') != self.secretToken:
+                            return False
+                        else:
+                            return True
+                        
+                except (socket.timeout, socket.error, OSError) as e: 
+                    if isinstance(e, socket.timeout):
+                        self._ping_timoeout()
+                    else:
+                        self._handle_socket_errors(e)
+
+                    return False
+
 
 
         def _handle_ping(self):
@@ -287,7 +334,7 @@ class Server:
                         return False
 
                     # Receive data from the client
-                    data = self.conn.recv(BUFFER_SIZE)
+                    data = self.conn.recv(self.buffer_size)
                     if data:
                         logging.debug(f"Client[{self.addr}] Received client key: {byte_string_to_int_list(data)}")
                         init_and_key = self.server_privatekey.decrypt(
@@ -312,7 +359,7 @@ class Server:
                         self.stop()
                         return False
 
-                except (socket.timeout, socket.error, OSError, Exception) as e:  # Merged the error handling
+                except (socket.timeout, socket.error, OSError, Exception) as e: 
                     if isinstance(e, socket.timeout):
                         self._ping_timoeout()
                     else:
@@ -374,7 +421,7 @@ class Server:
                         return
 
                     # Receive data from the client
-                    data = self.conn.recv(BUFFER_SIZE)
+                    data = self.conn.recv(self.buffer_size)
                     if data:
                         # Decrypt the data if encryption is enabled
                         if self._encryption:
@@ -475,21 +522,6 @@ class Server:
 # EXAMPLE USAGE
 SECRET_TOKEN = "your_secret_token"
 
-def validate_token(client, data):
-    """Check if the received token matches the secret token."""
-    print(data)
-    try:
-        if data.decode('utf-8') != SECRET_TOKEN:
-            logging.warning(f"Invalid token from {client.addr}. Closing connection.")
-            client.stop()
-        else:
-            logging.info(f"Valid token received from {client.addr}. Connection authorized.")
-            client.remove_event("message", validate_token)
-            client.on_event("message", handle_client_message)
-    except Exception as e:
-        logging.error(f"Error while validating token: {e}")
-        client.stop()
-
 def handle_client_message(client, data):
     """Handle received message after token validation."""
     logging.info(f"Received from {client.addr}: {data.decode('utf-8')}")  # Decode data for logging
@@ -500,11 +532,11 @@ def on_connected(client):
     logging.info(f"Connected by {client.addr}")
     client.on_event("disconnected", lambda c: logging.info(f"Disconnected by {c.addr}"))
     client.on_event("timeout", lambda c: logging.info(f"Timeout by {c.addr}"))
-    client.on_event("message", validate_token)
+    client.on_event("message", handle_client_message)
     client.on_event("ping", lambda c: logging.info(f"Ping from {c.addr}"))
 
 def main():
-    srv = Server('localhost', 5000, 5, 4096, 5, 10)
+    srv = Server('localhost', 5000, 5, 4096, 5, 10, SECRET_TOKEN)
 
     srv.on_connected(on_connected)
 
