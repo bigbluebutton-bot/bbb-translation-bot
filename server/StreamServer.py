@@ -207,12 +207,12 @@ def on_connected(streamclient):
     streamclient.on_TCPmessage(lambda c, d: print(f"Received TCP message from {c.addr()}: {d}"))
     streamclient.on_UDPmessage(lambda c, d: print(f"Received UDP message from {c.addr()}: {d}"))
     streamclient.on_disconnected(lambda c: print(f"Disconnected by {c.addr()}"))
-    streamclient.on_timeout(lambda: print(f"Timeout by {c.addr()}"))
+    streamclient.on_timeout(lambda c: print(f"Timeout by {c.addr()}"))
     streamclient.sendTCP("Hello from server!")
 
 
 def main():
-    srv = Server("localhost", 5000, 5001, 5099, SECRET_TOKEN, 4096, 5)
+    srv = Server("0.0.0.0", 5000, 5001, 5099, SECRET_TOKEN, 4096, 5)
 
     srv.on_connected(on_connected)
 
