@@ -113,6 +113,7 @@ class Server:
             logging.warning("Server already stopped.")
             return
         self._running = False
+        self._socket.sendto(b"exit", (self.host, self.port))
         self._socket.close()
         self._main_thread.join()
         logging.info("Server stopped.")
