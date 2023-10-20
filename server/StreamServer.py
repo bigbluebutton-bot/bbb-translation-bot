@@ -51,7 +51,7 @@ class EventHandler:
             t.join()
 
 
-class StreamServer:
+class Server:
 
     def __init__(self, host, tcpport, udpportmin, udpportmax, secrettoken="", encryption=False, timeout=5):
         self.host = host
@@ -172,15 +172,24 @@ class StreamServer:
             self.tcpclient.on_event("disconnected", lambda c: self.stop())
             self.tcpclient.on_event("timeout", lambda c: self.stop())
 
+        def addr(self):
+            return self.tcpclient.addr
+
+        def on_disconnected(self, callback):
+            self.tcpclient.on_event("disconnected", lambda c: callback(self))
+
+        def on_timeout(self, callback):
+            self.tcpclient.on_event("timeout", lambda c: callback(self))
+
         def sendTCP(self, data):
             jsondata = json.dumps({"type": "msg", "msg": data}).encode()
             self.tcpclient.send(jsondata)
 
         def on_TCPmessage(self, callback):
-            self.tcpclient.on_event("message", callback)
+            self.tcpclient.on_event("message", lambda c, d: callback(self, d))
 
         def on_UDPmessage(self, callback):
-            self.udpserver.on_event("message", callback)
+            self.udpserver.on_event("message", lambda a, d: callback(self, d))
 
         def stop(self):
             self.tcpclient.stop()
@@ -195,13 +204,15 @@ class StreamServer:
 
 def on_connected(streamclient):
     print(f"Connected by {streamclient.tcpclient.addr}")
-    streamclient.on_TCPmessage(lambda c, d: print(f"Received TCP message from {c.addr}: {d}"))
-    streamclient.on_UDPmessage(lambda a, d: print(f"Received UDP message from {a}: {d}"))
+    streamclient.on_TCPmessage(lambda c, d: print(f"Received TCP message from {c.addr()}: {d}"))
+    streamclient.on_UDPmessage(lambda c, d: print(f"Received UDP message from {c.addr()}: {d}"))
+    streamclient.on_disconnected(lambda c: print(f"Disconnected by {c.addr()}"))
+    streamclient.on_timeout(lambda: print(f"Timeout by {c.addr()}"))
     streamclient.sendTCP("Hello from server!")
 
 
 def main():
-    srv = StreamServer("localhost", 5000, 5001, 5099, SECRET_TOKEN, 4096, 5)
+    srv = Server("localhost", 5000, 5001, 5099, SECRET_TOKEN, 4096, 5)
 
     srv.on_connected(on_connected)
 
