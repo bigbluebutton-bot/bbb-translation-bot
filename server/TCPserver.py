@@ -121,7 +121,7 @@ class Server:
     def _remove_client(self, client):
         """Private method to remove a client from the server's client list."""
         with self._clients_lock:
-            logging.debug(f"Removing client: {client.addr}")
+            logging.debug(f"Removing TCP client: {client.addr}")
             self._clients.remove(client)
             self.active_clients_count -= 1  # Decrement counter here
 
