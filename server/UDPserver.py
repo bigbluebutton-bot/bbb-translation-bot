@@ -93,8 +93,9 @@ class Server:
         # stop all clients
         tempclients = None
         with self._clients_lock:
-            tempclients = self._clients.values().copy()
-        for clientslist in tempclients:
+            tempclients = self._clients.copy()
+        for clientslistaddr in tempclients:
+            clientslist = tempclients[clientslistaddr]
             for client in clientslist:
                 client.stop()
 
