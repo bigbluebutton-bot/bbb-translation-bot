@@ -242,6 +242,10 @@ class Server:
             self.secretToken = secretToken
             self.buffer_size = buffer_size
 
+        def address(self):
+            """Return the client's address."""
+            return self.addr
+
         def start(self):
             """Start the client listener."""
             logging.debug(f"Client[{self.addr}] Starting client.")
