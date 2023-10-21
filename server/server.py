@@ -6,6 +6,7 @@ import os
 import speech_recognition as sr
 import whisper
 import torch
+import logging
 
 from datetime import datetime, timedelta
 from queue import Queue
@@ -15,12 +16,13 @@ from sys import platform
 
 from StreamServer import Server
 
+logging.basicConfig(level=logging.DEBUG)
+
 
 class Client:
-    def __init__(self, udpserver, tcpclient):
+    def __init__(self, client):
 
-        self.udpserver = udpserver
-        self.tcpclient = tcpclient
+        self._client = client
 
         # The last time a recording was retreived from the queue.
         self.phrase_time = None
@@ -35,8 +37,10 @@ class Client:
 
         self.phrase_time = None
 
-    def Send(self, data):
-        self.tcpclient.Send(data)
+        self.temp_file = NamedTemporaryFile().name
+
+    def send(self, data):
+        self._client.send_message(data)
 
 
 
@@ -83,20 +87,20 @@ def main():
     record_timeout = args.record_timeout
     phrase_timeout = args.phrase_timeout
 
-    temp_file = NamedTemporaryFile().name
+    # temp_file = NamedTemporaryFile().name
     # transcription = ['']
 
     SECRET_TOKEN = "your_secret_token"
-    srv = Server('localhost', 5000, 55001, 5099, SECRET_TOKEN, 4096, 5)
+    srv = Server("127.0.0.1", 5000, 5001, SECRET_TOKEN, 4096, 5, 10, 1024)
     def OnConnected(c):
-        print("Connected by", c.tcpclient.addr)
+        print("Connected by", c.tcp_address())
 
         c.on_disconnected(lambda c: 
-            print("Disconnected by", c.addr)
+            print("Disconnected by", c.tcp_address())
         )
 
-        c.on_timeout(lambda:
-            print("Timeout by", c.addr)
+        c.on_timeout(lambda c:
+            print("Timeout by", c.tcp_address())
         )
 
         newclient = Client(c)
@@ -111,7 +115,7 @@ def main():
             if not client in client_queue.queue:
                 client_queue.put(client)
 
-        c.on_UDPmessage(onmsg)
+        c.on_udp_message(onmsg)
     
     srv.on_connected(OnConnected)
     print("Starting server: 127.0.0.1:5000...")
@@ -125,6 +129,9 @@ def main():
 
     while True:
         try:
+            # Infinite loops are bad for processors, must sleep.
+            sleep(0.25)
+
             now = datetime.utcnow()
             if not client_queue.empty():
                 client = client_queue.get()
@@ -146,15 +153,15 @@ def main():
                         client.last_sample += data
 
                     # Use AudioData to convert the raw data to wav data.
-                    audio_data = sr.AudioData(client.last_sample, 16000, 2)
+                    audio_data = sr.AudioData(client.last_sample, 48000, 2)
                     wav_data = io.BytesIO(audio_data.get_wav_data())
 
                     # Write wav data to the temporary file as bytes.
-                    with open(temp_file, 'w+b') as f:
+                    with open(client.temp_file, 'w+b') as f:
                         f.write(wav_data.read())
 
                     # Read the transcription.
-                    result = audio_model.transcribe(temp_file, fp16=torch.cuda.is_available(), task = args.task)
+                    result = audio_model.transcribe(client.temp_file, fp16=torch.cuda.is_available(), task = args.task)
                     text = result['text'].strip()
 
                     # If we detected a pause between recordings, add a new item to our transcripion.
@@ -169,7 +176,7 @@ def main():
                         tx = ""
                         for line in client.transcription:
                             tx = tx + line
-                        client.Send(str.encode(tx))
+                        client.send(str.encode(tx))
                     except:
                         pass
 
@@ -180,15 +187,18 @@ def main():
                     # # Flush stdout.
                     # print('', end='', flush=True)
 
-                    # Infinite loops are bad for processors, must sleep.
-                    sleep(0.25)
-        except KeyboardInterrupt:
+        # if KeyboardInterrupt stop. If everything else stop and show error.
+        except (KeyboardInterrupt, Exception) as e:
+            if isinstance(e, KeyboardInterrupt):
+                logging.info("Stopping...")
+            else:
+                logging.error(e)
             break
 
     srv.stop()
-    print("\n\nTranscription:")
-    for line in transcription:
-        print(line)
+    # print("\n\nTranscription:")
+    # for line in transcription:
+    #     print(line)
 
 
 if __name__ == "__main__":
