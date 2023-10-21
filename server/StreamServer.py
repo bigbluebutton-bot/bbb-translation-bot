@@ -6,10 +6,7 @@ import json
 import TCPserver as TCPserver
 import UDPserver as UDPserver
 
-# EXAMPLE USAGE
-SECRET_TOKEN = "your_secret_token"
-
-
+logging.basicConfig(level=logging.DEBUG)
 
 
 class EventHandler:
@@ -51,100 +48,126 @@ class EventHandler:
             t.join()
 
 
+class Client:
+    def __init__(self, on_remove, tcpclient, udpclient):
+        self._on_remove = on_remove
+        self._tcpclient = tcpclient
+        self._udpclient = udpclient
+
+        # if the tcp client disconnects or timeouts, remove the client
+        self._tcpclient.on_event("disconnected", lambda c: self.stop())
+        self._tcpclient.on_event("timeout", lambda c: self.stop())
+
+    def udp_address(self):
+        """Return the clients UDP address."""
+        return self._udpclient.address()
+    
+    def tcp_address(self):
+        """Return the clients TCP address."""
+        return self._tcpclient.address()
+    
+    def stop(self):
+        logging.debug(f"Stopping client {self._tcpclient.address()}, {self._udpclient.address()}.")
+        self._tcpclient.stop()
+        self._udpclient.stop()
+        self._on_remove(self)
+
+
+
+    def send_message(self, message):
+        """Send a TCP message to the client."""
+        self._tcpclient.send(message)
+
+
+
+    def on_tcp_message(self, callback):
+        """Register a new TCP message callback."""
+        return self._tcpclient.on_event("message", lambda c, d: callback(self, d))
+    
+    def remove_on_tcp_message(self, callback):
+        """Remove a TCP message callback using its ID."""
+        return self._tcpclient.remove_event("message", callback)
+    
+    
+    def on_udp_message(self, callback):
+        """Register a new UDP message callback."""
+        return self._udpclient.on_event("message", lambda c, d: callback(self, d))
+    
+    def remove_on_udp_message(self, callback):
+        """Remove a UDP message callback using its ID."""
+        return self._udpclient.remove_event("message", callback)
+    
+    
+    def on_disconnected(self, callback):
+        """Register a new disconnected callback."""
+        return self._tcpclient.on_event("disconnected", lambda c: callback(self))
+    
+    def remove_on_disconnected(self, callback):
+        """Remove a disconnected callback using its ID."""
+        return self._tcpclient.remove_event("disconnected", callback)
+    
+
+
+
+
 class Server:
+    def __init__(self, host, tcpport, udpport, secrettoken="", encryption=False, timeout=5, maxclients=10, buffer_size=1024):
+        self._host = host
+        self._tcpport = tcpport
+        self._udpport = udpport
+        self._secrettoken = secrettoken
+        self._encryption = encryption
+        self._timeout = timeout
+        self._maxclients = maxclients
+        self._buffer_size = buffer_size
 
-    def __init__(self, host, tcpport, udpportmin, udpportmax, secrettoken="", encryption=False, timeout=5):
-        self.host = host
-        self.tcpport = tcpport
-        self.udpportmin = udpportmin
-        self.udpportmax = udpportmax
-        self.udpports = set()
-        self.secrettoken = secrettoken
-        self.encryption = encryption
-        self.timeout = timeout
+        self._clients = {} # {tcpaddr: client}
 
-        self.udpports_lock = threading.Lock()
-        self.udpservers_lock = threading.Lock()
+        self._tcpserver = TCPserver.Server(self._host, self._tcpport, self._timeout, self._encryption, 5, self._maxclients, self._secrettoken, self._buffer_size)
+        self._udpserver = UDPserver.Server(self._host, self._udpport, self._encryption, self._buffer_size)
 
         self._connected_callbacks = EventHandler()
-        self.tcpserver = TCPserver.Server(host, tcpport, timeout, encryption, 5, 1, secrettoken)
-        self.udpserver_tcpclient_list = []
+
+        # event. tcp client on connect:
+        # 1. add client to udpserver whitelist
+        # 3. add tcp and udp client to self._clients
+        # 4. emit event connected
+        def _on_tcp_connected(tcpclient):
+            # 1. add client to udpserver whitelist
+            clienthost = tcpclient.address()[0]
+            aes_key = tcpclient.client_key
+            aes_initkey = tcpclient.client_initkey
+            udpclient = self._udpserver.add_client(clienthost, aes_key, aes_initkey)
+
+            # 2. add tcp and udp client to self._clients
+            client = Client(self._remove_client, tcpclient, udpclient)
+            self._clients[tcpclient.address()] = client
+
+            # 3. emit event connected
+            self._connected_callbacks.emit(client)
+
+        self._tcpserver.on_connected(_on_tcp_connected)
 
 
     def start(self):
-        self.tcpserver.on_connected(lambda c: self._on_tcp_connected(c))
-        self.tcpserver.start()
-
-    def _on_tcp_connected(self, client):
-        # select a udp port between udpportmin and udpportmax which isnt in use (in udpports)
-        selectedtport = 0
-        with self.udpports_lock:
-            for port in range(self.udpportmin, self.udpportmax):
-                if not port in self.udpports:
-                    selectedtport = port
-                    break
-
-        if selectedtport == 0:
-            logging.error("No free UDP port available!")
-            client.stop()
+        """Start the server."""
+        if self._tcpserver._running:
+            logging.warning("TCP server is already running.")
             return
-        
-        # add selected port to udpports
-        with self.udpports_lock:
-            self.udpports.add(selectedtport)
-
-        # get aes_key and aes_initkey
-        aes_key = client.client_key
-        aes_initkey = client.client_initkey
-
-        udpencryption = False
-        if self.encryption:
-            udpencryption = True
-
-        # create new udp server and add it to the map
-        udpserver = UDPserver.Server(self.host, selectedtport, udpencryption, aes_key, aes_initkey)
-
-        # add udpserver to map
-        with self.udpservers_lock:
-            streamclient = self.StreamClient(self._remove_client, udpserver, client)
-            self.udpserver_tcpclient_list.append(streamclient)
-
-        udpserver.start()
-
-        # send udp port to client in json format
-        jsondata = json.dumps({"type": "init_udpaddr", "msg": {"udp": {"host": self.host, "port": selectedtport, "encryption": udpencryption}}}).encode()
-        client.send(jsondata)
-
-        # emit on_connected event
-        self._connected_callbacks.emit(streamclient)
+        if self._udpserver._running:
+            logging.warning("UDP server is already running.")
+            return
+        self._tcpserver.start()
+        self._udpserver.start()
 
     def stop(self):
-        self.tcpserver.stop()
-
-        for udpserver_tcpclient in self.udpserver_tcpclient_list:
-            udpserver_tcpclient.stop()
-
-        self.udpserver_tcpclient_list = []
-
-        while self.tcpserver.active_clients_count > 0:  # Wait for all clients to disconnect
-            logging.info(f"Waiting for {self.tcpserver.active_clients_count} clients to disconnect...")
-            time.sleep(1)
-        logging.info("Server stopped.")
-
-
-    def _remove_client(self, streamclient):
-        """Private method to remove a client from the server's client list."""
-        logging.debug(f"Removing client: {streamclient.tcpclient.addr}")
-        with self.udpservers_lock:
-            if streamclient in self.udpserver_tcpclient_list:
-                self.udpserver_tcpclient_list.remove(streamclient)
-        with self.udpports_lock:
-            self.udpports.discard(streamclient.udpserver.port)
+        """Stop the server."""
+        self._tcpserver.stop()
+        self._udpserver.stop()
 
 
     def on_connected(self, callback):
-        """Register a callback for when a client connects."""
-        logging.debug("Registering 'connected' event.")
+        """Register a new connected callback."""
         # Get the number of parameters the callback has
         num_params = len(inspect.signature(callback).parameters)
 
@@ -153,68 +176,45 @@ class Server:
             return
         
         return self._connected_callbacks.add_event(callback)
+    
+    def remove_on_connected(self, callback):
+        """Remove a connected callback using its ID."""
+        return self._connected_callbacks.remove_event(callback)
+    
 
-    def remove_connected_event(self, event_id):
-        """Remove the connected event callback using its ID."""
-        logging.debug("Removing 'connected' event.")
-        self._connected_callbacks.remove_event(event_id)
-
-
-
-
-    class StreamClient():
-        def __init__(self, on_remove, udpserver, tcpclient):
-            self._on_remove = on_remove
-            self.udpserver = udpserver
-            self.tcpclient = tcpclient
-
-            # stop udp server if disconnected or timeout from tcp server
-            self.tcpclient.on_event("disconnected", lambda c: self.stop())
-            self.tcpclient.on_event("timeout", lambda c: self.stop())
-
-        def addr(self):
-            return self.tcpclient.addr
-
-        def on_disconnected(self, callback):
-            self.tcpclient.on_event("disconnected", lambda c: callback(self))
-
-        def on_timeout(self, callback):
-            self.tcpclient.on_event("timeout", lambda c: callback(self))
-
-        def sendTCP(self, data):
-            jsondata = json.dumps({"type": "msg", "msg": data}).encode()
-            self.tcpclient.send(jsondata)
-
-        def on_TCPmessage(self, callback):
-            self.tcpclient.on_event("message", lambda c, d: callback(self, d))
-
-        def on_UDPmessage(self, callback):
-            self.udpserver.on_event("message", lambda a, d: callback(self, d))
-
-        def stop(self):
-            self.tcpclient.stop()
-            self.udpserver.stop()
-            self._on_remove(self)
+    def _remove_client(self, client):
+        """Remove a client from the server's client list."""
+        logging.debug(f"Removing client: {client.tcp_address()}, {client.udp_address()}")
+        self._clients.pop(client.tcp_address(), None)
+        self._udpserver.remove_client(client.udp_address())
 
 
-
-
-
-
-
-def on_connected(streamclient):
-    print(f"Connected by {streamclient.tcpclient.addr}")
-    streamclient.on_TCPmessage(lambda c, d: print(f"Received TCP message from {c.addr()}: {d}"))
-    streamclient.on_UDPmessage(lambda c, d: print(f"Received UDP message from {c.addr()}: {d}"))
-    streamclient.on_disconnected(lambda c: print(f"Disconnected by {c.addr()}"))
-    streamclient.on_timeout(lambda: print(f"Timeout by {c.addr()}"))
-    streamclient.sendTCP("Hello from server!")
-
+# EXAMPLE USAGE
+SECRET_TOKEN = "your_secret_token"
 
 def main():
-    srv = Server("localhost", 5000, 5001, 5099, SECRET_TOKEN, 4096, 5)
+    srv = Server("127.0.0.1", 5000, 5001, SECRET_TOKEN, 4096, 5, 10, 1024)
 
-    srv.on_connected(on_connected)
+    def _on_connected(client):
+        print(f"Client connected: {client.tcp_address()}, {client.udp_address()}")
+        client.send_message(b"Hello from server!")
+
+        def _on_tcp_message(c, message):
+            print(f"Received TCP message from client: {c.tcp_address()}: {message}")
+            client.send_message(b"Hello from server!")
+
+        def _on_udp_message(c, message):
+            print(f"Received UDP message from client: {c.udp_address()}: {message}")
+            client.send_message(b"Hello from server!")
+
+        def _on_disconnected(c):
+            print(f"Client disconnected: {c.tcp_address()}, {c.udp_address()}")
+
+        client.on_tcp_message(_on_tcp_message)
+        client.on_udp_message(_on_udp_message)
+        client.on_disconnected(_on_disconnected)
+
+    srv.on_connected(_on_connected)
 
     srv.start()
 
@@ -225,7 +225,8 @@ def main():
         logging.info("Stopping server...")
         srv.stop()
 
+        logging.info("Server stopped.")
         logging.info("THE END")
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
