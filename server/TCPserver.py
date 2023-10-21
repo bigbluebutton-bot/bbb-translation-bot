@@ -15,7 +15,7 @@ import Event as event
 EventHandler = event.EventHandler
 
 
-logging.basicConfig(level=logging.DEBUG)
+
 
 
 # Convert the byte string to a list of integers for logging
@@ -515,6 +515,7 @@ def on_connected(client):
     client.on_event("ping", lambda c: logging.info(f"Ping from {c.addr}"))
 
 def main():
+    logging.basicConfig(level=logging.DEBUG)
     srv = Server('localhost', 5000, 5, 4096, 5, 10, SECRET_TOKEN)
 
     srv.on_connected(on_connected)

@@ -30,7 +30,7 @@ class EventHandler:
 
         with self._event_lock:
             for event_id, callback in self._callbacks.items():
-                logging.debug(f"Emitting event with ID: {event_id}")
+                # logging.debug(f"Emitting event with ID: {event_id}")
                 # Wrap the callback execution in a thread
                 t = threading.Thread(target=callback, args=args)
                 threads.append(t)

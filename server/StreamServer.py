@@ -8,7 +8,7 @@ import UDPserver as UDPserver
 import Event as event
 EventHandler = event.EventHandler
 
-logging.basicConfig(level=logging.DEBUG)
+
 
 
 class Client:
@@ -170,6 +170,7 @@ class Server:
 SECRET_TOKEN = "your_secret_token"
 
 def main():
+    logging.basicConfig(level=logging.DEBUG)
     srv = Server("127.0.0.1", 5000, 5001, SECRET_TOKEN, 4096, 5, 10, 1024)
 
     def _on_connected(client):

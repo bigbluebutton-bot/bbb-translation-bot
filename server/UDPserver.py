@@ -10,7 +10,7 @@ EventHandler = event.EventHandler
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 
-logging.basicConfig(level=logging.DEBUG)
+
 
 
 class Client:
@@ -173,7 +173,7 @@ class Server:
 
     def _decrypt(self, encrypted_data, aes_key, aes_initkey):
         """Decrypt the received data."""
-        logging.debug(f"Decrypting data")
+        # logging.debug(f"Decrypting data")
 
         cipher = Cipher(algorithms.AES(aes_key), modes.CFB(aes_initkey), backend=default_backend())
 
@@ -233,12 +233,13 @@ class Server:
             if self._encryption:
                 data = self._decrypt(data, client._aes_key, client._aes_initkey)
 
-            logging.debug(f"Received message from {address}: {data}")
+            # logging.debug(f"Received message from {address}: {len(data)}")
             client._message_callback.emit(client, data)
 
 
 
 def main():
+    logging.basicConfig(level=logging.DEBUG)
     srv = Server("127.0.0.1", 5001, True)
 
     srv.on_connected(lambda client: print(f"Client {client.address()} connected."))
