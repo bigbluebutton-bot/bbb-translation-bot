@@ -13,10 +13,6 @@ type UDPclient struct {
 	aesKey     []byte
 	aesIV      []byte
 	Encrypted  bool
-
-	messageEvent      *Event
-	connectedEvent    *Event
-	disconnectedEvent *Event
 }
 
 func NewUDPclient(serverAddr string, encrypted bool, aeskey, aesiv []byte) *UDPclient {
@@ -25,10 +21,6 @@ func NewUDPclient(serverAddr string, encrypted bool, aeskey, aesiv []byte) *UDPc
 		aesKey:     aeskey,
 		aesIV:      aesiv,
 		Encrypted:  encrypted,
-
-		messageEvent:      NewEvent(),
-		connectedEvent:    NewEvent(),
-		disconnectedEvent: NewEvent(),
 	}
 }
 
@@ -78,28 +70,4 @@ func (c *UDPclient) encryptMessage(message []byte) ([]byte, error) {
 	encryptedMessage := make([]byte, len(message))
 	stream.XORKeyStream(encryptedMessage, message)
 	return encryptedMessage, nil
-}
-
-func (c *UDPclient) OnConnected(handler func(message string)) {
-	c.connectedEvent.Add(handler)
-}
-
-func (c *UDPclient) RemoveOnConnected(handler func(message string)) {
-	c.connectedEvent.Remove(handler)
-}
-
-func (c *UDPclient) OnMessage(handler func(message string)) {
-	c.messageEvent.Add(handler)
-}
-
-func (c *UDPclient) RemoveOnMessage(handler func(message string)) {
-	c.messageEvent.Remove(handler)
-}
-
-func (c *UDPclient) OnDisconnected(handler func(message string)) {
-	c.disconnectedEvent.Add(handler)
-}
-
-func (c *UDPclient) RemoveOnDisconnected(handler func(message string)) {
-	c.disconnectedEvent.Remove(handler)
 }
