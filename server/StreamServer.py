@@ -93,7 +93,8 @@ class Server:
 
         # event. tcp client on connect:
         # 1. add client to udpserver whitelist
-        # 3. add tcp and udp client to self._clients
+        # 2. add tcp and udp client to self._clients
+        # 3. send udp server address to client
         # 4. emit event connected
         def _on_tcp_connected(tcpclient):
             # 1. add client to udpserver whitelist
@@ -106,7 +107,13 @@ class Server:
             client = Client(self._remove_client, tcpclient, udpclient)
             self._clients[tcpclient.address()] = client
 
-            # 3. emit event connected
+            # 3. send udp server address to client
+            udpaddr = udpclient.address()
+            udpencryption = udpclient._encryption
+            jsondata = json.dumps({"type": "init_udpaddr", "msg": {"udp": {"host": udpaddr[0], "port": udpaddr[1], "encryption": udpencryption}}}).encode()
+            tcpclient.send(jsondata)
+
+            # 4. emit event connected
             self._connected_callbacks.emit(client)
 
         self._tcpserver.on_connected(_on_tcp_connected)
@@ -159,15 +166,15 @@ def main():
 
     def _on_connected(client):
         print(f"Client connected: {client.tcp_address()}, {client.udp_address()}")
-        client.send_message(b"Hello from server!")
+        client.send_message(b"Hello from server! Connected")
 
         def _on_tcp_message(c, message):
             print(f"Received TCP message from client: {c.tcp_address()}: {message}")
-            client.send_message(b"Hello from server!")
+            client.send_message(b"Hello from server! TCP")
 
         def _on_udp_message(c, message):
             print(f"Received UDP message from client: {c.udp_address()}: {message}")
-            client.send_message(b"Hello from server!")
+            client.send_message(b"Hello from server! UDP")
 
         def _on_disconnected(c):
             print(f"Client disconnected: {c.tcp_address()}, {c.udp_address()}")
