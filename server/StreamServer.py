@@ -69,6 +69,15 @@ class Client:
         """Remove a disconnected callback using its ID."""
         return self._tcpclient.remove_event("disconnected", callback)
     
+    
+    def on_timeout(self, callback):
+        """Register a new timeout callback."""
+        return self._tcpclient.on_event("timeout", lambda c: callback(self))
+    
+    def remove_on_timeout(self, callback):
+        """Remove a timeout callback using its ID."""
+        return self._tcpclient.remove_event("timeout", callback)
+    
 
 
 
