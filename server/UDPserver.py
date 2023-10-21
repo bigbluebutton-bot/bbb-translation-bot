@@ -8,8 +8,6 @@ import time
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 
-BUFFER_SIZE = 1024
-
 logging.basicConfig(level=logging.DEBUG)
 
 
@@ -54,121 +52,183 @@ class EventHandler:
             t.join()
 
 
+class Client:
+    def __init__(self, on_remove, host, encryption=False, aes_key=5, aes_initkey=5):
+        self._on_remove = on_remove
+        self._host = host
+        self._port = None
+        self._encryption = encryption
+        self._aes_key = aes_key
+        self._aes_initkey = aes_initkey
+        self._message_callback = EventHandler()
 
-
-
-
-
-class Server:
-    def __init__(self, host, port, encryption=False, aes_key=5, aes_initkey=5):
-        logging.debug("Initializing Server.")
-        self.host = host
-        self.port = port
-        self._running = False
-        self._socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.encryption = encryption
-        self.aes_key = aes_key  # 32 bytes AES key
-        self.aes_initkey = aes_initkey
-        self.whitelist = []
-        self._message_callbacks = EventHandler()
-        self._main_thread = None
-        
-    def _handle_socket_errors(self, error):
-        """Centralize error handling for socket-related errors."""
-        logging.debug(f"Socket error: {error}")
-        self.stop()
-
-
-    def start(self):
-        self._socket.bind((self.host, self.port))
-        logging.info(f"Server started at {self.host}:{self.port}")
-        self._running = True
-        t = threading.Thread(target=self._listen)
-        self._main_thread = t
-        t.start()
-
-
-
-    def _listen(self):
-        while self._running:
-            try:
-                data, addr = self._socket.recvfrom(BUFFER_SIZE)
-                if not len(self.whitelist) == 0:
-                    if not addr[0] in self.whitelist:
-                        continue
-                if data:
-                    if self.encryption:
-                        data = self._decrypt(data)
-
-                    self._message_callbacks.emit(addr, data)
-
-            except (Exception) as e:
-                if not self._running:
-                    return
-                self._handle_socket_errors(e)
+    def address(self):
+        """Return the server's address."""
+        return self._host, self._port
 
     def stop(self):
-        """Stop the server."""
-        if not self._running:
-            logging.warning("Server already stopped.")
-            return
-        self._running = False
-        self._socket.close()
-        self._main_thread.join()
-        logging.info("Server stopped.")
-
-
-    def _decrypt(self, encrypted_data):
-        """Decrypt the received data."""
-        logging.debug(f"Decrypting data")
-
-        cipher = Cipher(algorithms.AES(self.aes_key), modes.CFB(self.aes_initkey), backend=default_backend())
-
-        decryptor = cipher.decryptor()
-
-        plaintext = decryptor.update(encrypted_data) + decryptor.finalize()
-        return plaintext
-
+        logging.debug(f"Removing client {self._host} from whitelist.")
+        self._message_callback = EventHandler()
+        self._on_remove(self._host)
 
     def on_event(self, event_type, callback):
         # Get the number of parameters the callback has
         num_params = len(inspect.signature(callback).parameters)
 
-        if event_type == 'message':
-            if num_params == 2:
-                return self._message_callbacks.add_event(callback)
-            else:
-                logging.error(f"Invalid number of parameters for 'message' event. Expected 2, got {num_params}.")
-
-    def remove_event(self, event_type, event_id):
-        """Remove an event callback on the event type."""
         if event_type == "message":
-            self._message_callbacks.remove_event(event_id)
+            if num_params == 2:
+                return self._message_callback.add_event(callback)
+            else:
+                logging.error(f"Invalid number of parameters for 'on_message' event. Expected 2, got {num_params}.")
+        else:
+            logging.warning(f"Unsupported event type: {event_type}")
+
+    def remove_event(self, event_type, callback):
+        if event_type == "message":
+            self._message_callback.remove_event(callback)
         else:
             logging.warning(f"Unsupported event type: {event_type}")
 
 
+class Server:
+    def __init__(self, host, port, encryption=False, buffer_size=1024):
+        logging.debug("Initializing UDP server.")
+        self._host = host
+        self._port = port
+        self._running = False
+        self._socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self._encryption = encryption
+        self._main_thread = None
+        self._clients = {}
+        self._connected_callbacks = EventHandler()
+        self._buffer_size = buffer_size
 
-# Usage:
+    def start(self):
+        """Start the server."""
+        if self._running:
+            logging.warning("UDP server is already running.")
+            return
+
+        logging.debug("Starting UDP server.")
+        self._running = True
+        self._socket.bind((self._host, self._port))
+
+        self._main_thread = threading.Thread(target=self._listen)
+        self._main_thread.start()
+
+        logging.info(f"Server started at {self._host}:{self._port}")
+
+    def stop(self):
+        """Stop the server."""
+        if not self._running:
+            logging.warning("UDP server is not running.")
+            return
+        logging.debug("Stopping UDP server.")
+        self._running = False
+        self._socket.close()
+
+        # stop all clients
+        for client in self._clients.values():
+            client.stop()
+
+        self._main_thread.join()
+        logging.info("UDP server stopped.")
+
+
+
+
+    def add_client(self, host, aes_key=5, aes_initkey=5):
+        """Add a client to the whitelist."""
+        logging.debug(f"Adding UDP client {host} to whitelist.")
+        udp_encryption = False
+        if self._encryption:
+            udp_encryption = True
+
+        client = Client(self._remove_client, host, udp_encryption, aes_key, aes_initkey)
+        self._clients[host] = client
+        return client
+
+    def remove_client(self, address):
+        """Remove a client from the whitelist."""
+        logging.debug(f"Removing UDP client {address} from whitelist.")
+        client = self._clients.get(address)
+        if client is None:
+            logging.debug(f"UDP client {address} not found.")
+            return
+        client.stop()
+
+    def _remove_client(self, address):
+        """Remove a client from the whitelist. Internal use only."""
+        logging.debug(f"Removing UDP client {address} from whitelist.")
+        self._clients.pop(address, None)
+
+
+
+    def on_connected(self, callback):
+        """Register a callback for when a client connects."""
+        # Get the number of parameters the callback has
+        num_params = len(inspect.signature(callback).parameters)
+
+        if num_params == 1:
+            return self._connected_callbacks.add_event(callback)
+        else:
+            logging.error(f"Invalid number of parameters for 'on_connected' event. Expected 1, got {num_params}.")
+
+    def remove_on_connected(self, callback):
+        self._connected_callbacks.remove_event(callback)
+
+
+
+
+    def _handle_socket_errors(self, error):
+        """Centralize error handling for socket-related errors."""
+        logging.debug(f"UDP socket error: {error}")
+        self.stop()
+
+    def _listen(self):
+        """Listen for incoming messages."""
+        logging.debug("Listening for incoming UDP messages.")
+        while self._running:
+            try:
+                data, address = self._socket.recvfrom(self._buffer_size)
+                host = address[0]
+                port = address[1]
+            except socket.error as e:
+                self._handle_socket_errors(e)
+                break
+
+            client = self._clients.get(host)
+            if client is None:
+                logging.debug(f"Received UDP message from {address}, which is not in the whitelist/clientlist.")
+                continue
+
+            if client._port is None:
+                client._port = port
+                self._connected_callbacks.emit(client)
+
+
+            if self._encryption:
+                data = self._decrypt(data, client._aes_key, client._aes_initkey)
+
+            logging.debug(f"Received message from {address}: {data}")
+            client._message_callback.emit(data)
+
+
+
 def main():
+    srv = Server("127.0.0.1", 5001, True)
+
+    srv.on_connected(lambda client: print(f"Client {client.address()} connected."))
+
     aes_key = os.urandom(32)  # Generate a random 32 bytes AES key
     aes_initkey = os.urandom(16) # Generate a random 16 bytes AES init key
     print(f"AES Key: {aes_key}")
     print(f"AES Init Key: {aes_initkey}")
-    srv =  Server('localhost', 5001, True, aes_key, aes_initkey)
+    c1 = srv.add_client("127.0.0.1", aes_key, aes_initkey)
 
-    srv.whitelist = ['127.0.0.1']
-
-    srv.on_event("message", lambda addr, data: logging.info(f"msg from {addr}: {data}"))
+    c1.on_event("message", lambda c, data: print(f"Client {c.address()}: {data}"))
 
     srv.start()
 
-    try:
-        while True:  # Keep the server running until a keyboard interrupt
-            time.sleep(1)
-    except KeyboardInterrupt:
-        logging.info("Stopping server...")
-        srv.stop()
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
