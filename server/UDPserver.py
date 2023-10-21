@@ -163,6 +163,19 @@ class Server:
 
 
 
+    def _decrypt(self, encrypted_data, aes_key, aes_initkey):
+        """Decrypt the received data."""
+        logging.debug(f"Decrypting data")
+
+        cipher = Cipher(algorithms.AES(aes_key), modes.CFB(aes_initkey), backend=default_backend())
+
+        decryptor = cipher.decryptor()
+
+        plaintext = decryptor.update(encrypted_data) + decryptor.finalize()
+        return plaintext
+
+
+
     def _handle_socket_errors(self, error):
         """Centralize error handling for socket-related errors."""
         logging.debug(f"UDP socket error: {error}")
@@ -180,7 +193,23 @@ class Server:
                 self._handle_socket_errors(e)
                 break
 
-            client = self._clients.get(host)
+            clientlist = self._clients.get(host)
+            if clientlist is None:
+                logging.debug(f"Received UDP message from {address}, which is not in the whitelist/clientlist.")
+                continue
+
+            client = None
+            for c in clientlist:
+                if c.address() == address:
+                    client = c
+                    break
+
+            if client is None:
+                 for c in clientlist:
+                     if c._port is None:
+                         client = c
+                         break
+                     
             if client is None:
                 logging.debug(f"Received UDP message from {address}, which is not in the whitelist/clientlist.")
                 continue
@@ -194,7 +223,7 @@ class Server:
                 data = self._decrypt(data, client._aes_key, client._aes_initkey)
 
             logging.debug(f"Received message from {address}: {data}")
-            client._message_callback.emit(data)
+            client._message_callback.emit(client, data)
 
 
 
