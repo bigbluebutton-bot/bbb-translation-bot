@@ -61,6 +61,7 @@ class Server:
         self._encryption = encryption
         self._main_thread = None
         self._clients = dict()      # {host: [Client, ...]}
+        self._clients_lock = threading.Lock()
         self._connected_callbacks = EventHandler()
         self._buffer_size = buffer_size
 
@@ -90,7 +91,10 @@ class Server:
         self._socket.close()
 
         # stop all clients
-        for clientslist in self._clients.values():
+        tempclients = None
+        with self._clients_lock:
+            tempclients = self._clients.values().copy()
+        for clientslist in tempclients:
             for client in clientslist:
                 client.stop()
 
@@ -109,41 +113,44 @@ class Server:
 
         client = Client(self._remove_client, host, udp_encryption, aes_key, aes_initkey)
 
-        if host in self._clients:
-            self._clients[host].append(client)
-        else:
-            self._clients[host] = [client]
-        return client
+        with self._clients_lock:
+            if host in self._clients:
+                self._clients[host].append(client)
+            else:
+                self._clients[host] = [client]
+            return client
 
     def remove_client(self, address):
         """Remove a client from the whitelist."""
         logging.debug(f"Removing UDP client {address}.")
         host = address[0]
-        clientslist = self._clients.get(host)
-        if clientslist is None:
-            logging.debug(f"UDP client {address} not found.")
-            return
-        for client in clientslist:
-            if client.address() == address:
-                client.stop()
+        with self._clients_lock:
+            clientslist = self._clients.get(host)
+            if clientslist is None:
+                logging.debug(f"UDP client {address} not found.")
                 return
-        logging.debug(f"UDP client {address} not found in list.")
+            for client in clientslist:
+                if client.address() == address:
+                    client.stop()
+                    return
+            logging.debug(f"UDP client {address} not found in list.")
 
     def _remove_client(self, address):
         """Remove a client from the whitelist. Internal use only."""
         logging.debug(f"Removing UDP client {address} from whitelist.")
         host = address[0]
-        clientslist = self._clients.get(host)
-        if clientslist is None:
-            logging.debug(f"UDP client {address} not found.")
-            return
-        for client in clientslist:
-            if client.address() == address:
-                clientslist.remove(client)
-                break
-            
-        if len(clientslist) == 0:
-            self._clients.pop(host)
+        with self._clients_lock:
+            clientslist = self._clients.get(host)
+            if clientslist is None:
+                logging.debug(f"UDP client {address} not found.")
+                return
+            for client in clientslist:
+                if client.address() == address:
+                    clientslist.remove(client)
+                    break
+                
+            if len(clientslist) == 0:
+                self._clients.pop(host)
 
 
 
@@ -193,7 +200,9 @@ class Server:
                 self._handle_socket_errors(e)
                 break
 
-            clientlist = self._clients.get(host)
+            clientlist = None
+            with self._clients_lock:
+                clientlist = self._clients.get(host)
             if clientlist is None:
                 logging.debug(f"Received UDP message from {address}, which is not in the whitelist/clientlist.")
                 continue
