@@ -108,9 +108,8 @@ class Server:
             self._clients[tcpclient.address()] = client
 
             # 3. send udp server address to client
-            udpaddr = udpclient.address()
             udpencryption = udpclient._encryption
-            jsondata = json.dumps({"type": "init_udpaddr", "msg": {"udp": {"host": udpaddr[0], "port": udpaddr[1], "encryption": udpencryption}}}).encode()
+            jsondata = json.dumps({"type": "init_udpaddr", "msg": {"udp": {"host": self._host, "port": self._udpport, "encryption": udpencryption}}}).encode()
             tcpclient.send(jsondata)
 
             # 4. emit event connected
