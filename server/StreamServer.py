@@ -149,14 +149,13 @@ class Server:
         """Remove a client from the server's client list."""
         logging.debug(f"Removing client: {client.tcp_address()}, {client.udp_address()}")
         self._clients.pop(client.tcp_address(), None)
-        self._udpserver.remove_client(client.udp_address())
 
 
 # EXAMPLE USAGE
 SECRET_TOKEN = "your_secret_token"
 
 def main():
-    srv = Server("localhost", 5000, 5001, 5099, SECRET_TOKEN, 4096, 5)
+    srv = Server("127.0.0.1", 5000, 5001, SECRET_TOKEN, 4096, 5, 10, 1024)
 
     def _on_connected(client):
         print(f"Client connected: {client.tcp_address()}, {client.udp_address()}")
