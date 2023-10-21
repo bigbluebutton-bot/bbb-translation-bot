@@ -25,7 +25,7 @@ class Client:
 
     def address(self):
         """Return the server's address."""
-        return [self._host, self._port]
+        return (self._host, self._port)
 
     def stop(self):
         logging.debug(f"Removing UDP client {self._host} from whitelist.")
@@ -217,6 +217,7 @@ class Server:
                  for c in clientlist:
                      if c._port is None:
                          client = c
+                         client._port = port
                          break
                      
             if client is None:
