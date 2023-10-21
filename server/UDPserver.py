@@ -86,6 +86,7 @@ class Server:
             return
         logging.debug("Stopping UDP server.")
         self._running = False
+        self._socket.sendto(b"exit", (self.host, self.port))
         self._socket.close()
 
         # stop all clients
