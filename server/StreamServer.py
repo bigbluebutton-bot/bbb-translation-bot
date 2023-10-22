@@ -83,7 +83,7 @@ class Client:
 
 
 class Server:
-    def __init__(self, host, tcpport, udpport, secrettoken="", encryption=False, timeout=5, maxclients=10, buffer_size=1024):
+    def __init__(self, host, tcpport, udpport, secrettoken="", encryption=False, timeout=5, maxclients=10, buffer_size=1024, external_host="", external_udpport=0):
         self._host = host
         self._tcpport = tcpport
         self._udpport = udpport
@@ -92,6 +92,15 @@ class Server:
         self._timeout = timeout
         self._maxclients = maxclients
         self._buffer_size = buffer_size
+
+        if external_host == "":
+            self._external_host = host
+        else:
+            self._external_host = external_host
+        if external_udpport == 0:
+            self._external_udpport = udpport
+        else:
+            self._external_udpport = external_udpport
 
         self._clients = {} # {tcpaddr: client}
 
@@ -118,7 +127,7 @@ class Server:
 
             # 3. send udp server address to client
             udpencryption = udpclient._encryption
-            jsondata = json.dumps({"type": "init_udpaddr", "msg": {"udp": {"host": self._host, "port": self._udpport, "encryption": udpencryption}}}).encode()
+            jsondata = json.dumps({"type": "init_udpaddr", "msg": {"udp": {"host": self._external_host, "port": self._external_udpport, "encryption": udpencryption}}}).encode()
             tcpclient.send(jsondata)
 
             # 4. emit event connected
@@ -171,7 +180,7 @@ SECRET_TOKEN = "your_secret_token"
 
 def main():
     logging.basicConfig(level=logging.DEBUG)
-    srv = Server("127.0.0.1", 5000, 5001, SECRET_TOKEN, 4096, 5, 10, 1024)
+    srv = Server("0.0.0.0", 5000, 5001, SECRET_TOKEN, 4096, 5, 10, 1024, "127.0.0.1", 5001)
 
     def _on_connected(client):
         print(f"Client connected: {client.tcp_address()}, {client.udp_address()}")

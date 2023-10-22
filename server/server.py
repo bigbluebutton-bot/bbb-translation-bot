@@ -91,7 +91,7 @@ def main():
     # transcription = ['']
 
     SECRET_TOKEN = "your_secret_token"
-    srv = Server("127.0.0.1", 5000, 5001, SECRET_TOKEN, 4096, 5, 10, 1024)
+    srv = Server("127.0.0.1", 5000, 5001, SECRET_TOKEN, 4096, 5, 10, 1024, "172.30.121.241")
     def OnConnected(c):
         print("Connected by", c.tcp_address())
 
@@ -111,6 +111,7 @@ def main():
                 return
             client = client_dict[c]
             client.data_queue.put(data)
+            logging.debug(f"DATA: {len(data)}")
             
             if not client in client_queue.queue:
                 client_queue.put(client)
@@ -171,11 +172,14 @@ def main():
                     else:
                         client.transcription[-1] = text
 
+                    logging.info(str.encode(text))
+
                     # send text to client
                     try:
                         tx = ""
                         for line in client.transcription:
                             tx = tx + line
+                        logging.info(str.encode(tx))
                         client.send(str.encode(tx))
                     except:
                         pass
