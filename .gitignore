@@ -1,5 +1,6 @@
 *.temp
 config.json
+*.opus
 
 
 # Byte-compiled / optimized / DLL files
