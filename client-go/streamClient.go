@@ -141,6 +141,11 @@ func (sc *StreamClient) SendUDPMessage(data []byte) error {
 	return sc.udpClient.SendMessage(data)
 }
 
+func (sc *StreamClient) Write(p []byte) (int, error) {
+	err := sc.SendUDPMessage(p)
+	return len(p), err
+}
+
 func (sc *StreamClient) Close() {
 	if sc.tcpClient != nil {
 		sc.tcpClient.Close()

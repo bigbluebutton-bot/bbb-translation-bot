@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+
 	// "strconv"
 	"time"
 
@@ -16,7 +17,7 @@ import (
 
 	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v3"
-	// "github.com/pion/webrtc/v4/pkg/media/oggwriter"
+	"github.com/pion/webrtc/v4/pkg/media/oggwriter"
 )
 
 func main() {
@@ -102,7 +103,7 @@ func main() {
 		panic(err)
 	}
 
-	sc := NewStreamClient("127.0.0.1", 5000, true, "your_secret_token")
+	sc := NewStreamClient("172.30.121.241", 5000, true, "your_secret_token")
 
 	sc.OnConnected(func(message string) {
 		fmt.Println("Connected to server.")
@@ -135,17 +136,28 @@ func main() {
 		panic(err)
 	}
 
-	// oggFile, err := oggwriter.New("audio_output.ogg", 48000, 2)
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// defer oggFile.Close()
+	oggFile, err := oggwriter.NewWith(sc, 48000, 2)
+	if err != nil {
+		panic(err)
+	}
+	defer oggFile.Close()
 
 	audio.OnTrack(func(status *bot.StatusType, track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
 		// Only handle audio tracks
 		if track.Kind() != webrtc.RTPCodecTypeAudio {
 			return
 		}
+
+		fmt.Println("ID: " + track.ID())
+		fmt.Println("Kind: " + track.Kind().String())
+		fmt.Println("StreamID: " + track.StreamID())
+		fmt.Println("SSRC: " + fmt.Sprint(track.SSRC()))
+		fmt.Println("Codec: " + track.Codec().MimeType)
+		fmt.Println("Codec PayloadType: " + fmt.Sprint(track.Codec().PayloadType))
+		fmt.Println("Codec ClockRate: " + fmt.Sprint(track.Codec().ClockRate))
+		fmt.Println("Codec Channels: " + fmt.Sprint(track.Codec().Channels))
+		fmt.Println("Codec SDPFmtpLine: " + track.Codec().SDPFmtpLine)
+
 	
 		go func() {
 			buffer := make([]byte, 1024)
@@ -166,18 +178,11 @@ func main() {
 					fmt.Println("Error during RTP packet unmarshal:", err)
 					return
 				}
-	
-				// fmt.Println("sending audio" + strconv.Itoa(n))
-				err = sc.SendUDPMessage(buffer)
-				if err != nil {
-					fmt.Println("Failed to send UDP message:", err)
-					os.Exit(1)
-				}
 
-				// if err := oggFile.WriteRTP(rtpPacket); err != nil {
-				// 	fmt.Println("Error during OGG file write:", err)
-				// 	return
-				// }
+				if err := oggFile.WriteRTP(rtpPacket); err != nil {
+					fmt.Println("Error during OGG file write:", err)
+					return
+				}
 			}
 		}()
 	})
