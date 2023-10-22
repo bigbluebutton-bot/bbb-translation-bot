@@ -7,6 +7,7 @@ import speech_recognition as sr
 import whisper
 import torch
 import logging
+from pydub import AudioSegment
 
 from datetime import datetime, timedelta
 from queue import Queue
@@ -91,7 +92,7 @@ def main():
     # transcription = ['']
 
     SECRET_TOKEN = "your_secret_token"
-    srv = Server("127.0.0.1", 5000, 5001, SECRET_TOKEN, 4096, 5, 10, 1024, "172.30.121.241")
+    srv = Server("0.0.0.0", 5000, 5001, SECRET_TOKEN, 4096, 5, 10, 1024, "172.30.121.241")
     def OnConnected(c):
         print("Connected by", c.tcp_address())
 
@@ -111,7 +112,6 @@ def main():
                 return
             client = client_dict[c]
             client.data_queue.put(data)
-            logging.debug(f"DATA: {len(data)}")
             
             if not client in client_queue.queue:
                 client_queue.put(client)
@@ -153,13 +153,14 @@ def main():
                         data = client.data_queue.get()
                         client.last_sample += data
 
-                    # Use AudioData to convert the raw data to wav data.
-                    audio_data = sr.AudioData(client.last_sample, 48000, 2)
-                    wav_data = io.BytesIO(audio_data.get_wav_data())
+                    # Write to file for debugging.
+                    # with open('sample.opus', 'wb') as f:
+                    #     f.write(client.last_sample)
 
-                    # Write wav data to the temporary file as bytes.
-                    with open(client.temp_file, 'w+b') as f:
-                        f.write(wav_data.read())
+                    # Convert opus to wav
+                    opus_data = io.BytesIO(client.last_sample)
+                    opus_audio = AudioSegment.from_file(opus_data, format="ogg", frame_rate=48000, channels=2, sample_width=2)
+                    opus_audio.export(client.temp_file, format="wav")
 
                     # Read the transcription.
                     result = audio_model.transcribe(client.temp_file, fp16=torch.cuda.is_available(), task = args.task)
