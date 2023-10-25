@@ -8,13 +8,22 @@ import (
 	"sync"
 )
 
+type status int
+const (
+	CONNECTED status = iota
+	DISCONNECTED
+)
+
 type StreamClient struct {
 	tcpClient  *TCPclient
 	udpClient  *UDPclient
 	serverHost string
 	serverPort int
 
+	status status
+
 	connectedEvent *Event
+	messageEvent *Event
 }
 
 func NewStreamClient(host string, port int, useEncryption bool, secretToken string) *StreamClient {
@@ -26,7 +35,10 @@ func NewStreamClient(host string, port int, useEncryption bool, secretToken stri
 		serverHost: host,
 		serverPort: port,
 
+		status: DISCONNECTED,
+
 		connectedEvent: NewEvent(),
+		messageEvent:   NewEvent(),
 	}
 }
 
@@ -59,6 +71,17 @@ func (sc *StreamClient) getMessageType(message string) (MessageType, error) {
 }
 
 func (sc *StreamClient) Connect() error {
+
+	sc.tcpClient.OnMessage(func(message string) {
+		if sc.status == CONNECTED {
+			sc.messageEvent.Emit(message)
+		}
+	})
+	disconnectedhandler := func(message string) {
+		sc.status = DISCONNECTED
+	}
+	sc.tcpClient.OnDisconnected(disconnectedhandler)
+	sc.tcpClient.OnTimeout(disconnectedhandler)
 
 	// Mutex to wait until the server has sent the UDP address
 	onmsgmutex := sync.Mutex{}
@@ -119,6 +142,7 @@ func (sc *StreamClient) Connect() error {
 	defer onmsgmutex.Unlock()
 
 	sc.connectedEvent.Emit("connected")
+	sc.status = CONNECTED
 
 	sc.OnTimeout(func(message string) {
 		sc.Close()
@@ -147,6 +171,7 @@ func (sc *StreamClient) Write(p []byte) (int, error) {
 }
 
 func (sc *StreamClient) Close() {
+	sc.status = DISCONNECTED
 	if sc.tcpClient != nil {
 		sc.tcpClient.Close()
 	}
@@ -164,11 +189,11 @@ func (sc *StreamClient) RemoveOnConnected(handler func(message string)) {
 }
 
 func (sc *StreamClient) OnTCPMessage(handler func(message string)) {
-	sc.tcpClient.OnMessage(handler)
+	sc.messageEvent.Add(handler)
 }
 
 func (sc *StreamClient) RemoveOnTCPMessage(handler func(message string)) {
-	sc.tcpClient.RemoveOnMessage(handler)
+	sc.messageEvent.Remove(handler)
 }
 
 // on disconnected
