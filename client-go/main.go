@@ -5,8 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
-
-	// "strconv"
+	"strings"
 	"time"
 
 	api "github.com/ITLab-CC/bigbluebutton-bot/api"
@@ -103,7 +102,17 @@ func main() {
 		panic(err)
 	}
 
-	sc := NewStreamClient("172.30.121.241", 5000, true, "your_secret_token")
+	enCapture, err := client.CreateCapture("en")
+	if err != nil {
+		panic(err)
+	}
+
+
+
+
+	
+
+	sc := NewStreamClient("172.30.62.194", 5000, true, "your_secret_token")
 
 	sc.OnConnected(func(message string) {
 		fmt.Println("Connected to server.")
@@ -117,8 +126,36 @@ func main() {
 		fmt.Println("Connection to server timed out.")
 	})
 
-	sc.OnTCPMessage(func(message string) {
-		fmt.Println("TCP message event:", message)
+	oldtext := ""
+	sc.OnTCPMessage(func(newtext string) {
+		fmt.Println("TCP message event:", newtext)
+
+		newWords := ""
+		newWordsSlice := strings.Split(newtext, " ")
+		oldWordsSlice := strings.Split(oldtext, " ")
+
+		startnewwords := false
+		for count, word := range newWordsSlice {
+			if count >= len(oldWordsSlice) {
+				startnewwords = true
+			}
+			
+			if !startnewwords {
+				if word != oldWordsSlice[count] {
+					startnewwords = true
+				}
+			} else {
+				newWords += word + " "
+			}
+		}
+		oldtext = newtext
+	
+		//newWords = strings.TrimSpace(newWords)
+
+		err = enCapture.SendText(newWords)
+		if err != nil {
+			panic(err)
+		}
 	})
 
 	err = sc.Connect()
