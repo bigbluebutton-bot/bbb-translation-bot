@@ -17,7 +17,8 @@ from sys import platform
 
 from StreamServer import Server
 
-logging.basicConfig(level=logging.DEBUG)
+
+logging.basicConfig(level=logging.INFO)
 
 
 class Client:
@@ -92,7 +93,7 @@ def main():
     # transcription = ['']
 
     SECRET_TOKEN = "your_secret_token"
-    srv = Server("0.0.0.0", 5000, 5001, SECRET_TOKEN, 4096, 5, 10, 1024, "172.30.121.241")
+    srv = Server("0.0.0.0", 5000, 5001, SECRET_TOKEN, 4096, 5, 10, 1024, "172.30.62.194")
     def OnConnected(c):
         print("Connected by", c.tcp_address())
 
@@ -180,7 +181,7 @@ def main():
                         tx = ""
                         for line in client.transcription:
                             tx = tx + line
-                        logging.info(str.encode(tx))
+                        # logging.info(str.encode(tx))
                         client.send(str.encode(tx))
                     except:
                         pass

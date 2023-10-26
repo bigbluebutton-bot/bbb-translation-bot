@@ -2,6 +2,8 @@ github.com/ITLab-CC/bigbluebutton-bot v0.0.0-20231025110928-6add7e019f30 h1:p0xp
 github.com/ITLab-CC/bigbluebutton-bot v0.0.0-20231025110928-6add7e019f30/go.mod h1:zL/70dGVl+IRtRJy+b9ReHzeRBBHHl6dVpCCewRJ+ZU=
 github.com/ITLab-CC/bigbluebutton-bot v0.0.0-20231025133423-28e051f70adb h1:Sc9naC8b79gpWWNanR6xe0dRftvPU2MLQo0Tm2j4D3E=
 github.com/ITLab-CC/bigbluebutton-bot v0.0.0-20231025133423-28e051f70adb/go.mod h1:zL/70dGVl+IRtRJy+b9ReHzeRBBHHl6dVpCCewRJ+ZU=
+github.com/ITLab-CC/bigbluebutton-bot v0.0.0-20231026161803-ca176ffc9d25 h1:bxZQP1EoVumqob97tKfAXxZkSWz5KlUmc+vj7sP91IU=
+github.com/ITLab-CC/bigbluebutton-bot v0.0.0-20231026161803-ca176ffc9d25/go.mod h1:zL/70dGVl+IRtRJy+b9ReHzeRBBHHl6dVpCCewRJ+ZU=
 github.com/JulianKropp/golang-socketio v0.0.0-20230816150715-bbc29a93ec5d h1:YednRCWWnBYIechF05rniPb09n3Y7dm1Kgf7Aad9i+0=
 github.com/JulianKropp/golang-socketio v0.0.0-20230816150715-bbc29a93ec5d/go.mod h1:gYG7s8zBJyL7yIpe6w7JY1pY9egOGsr8v2afXLrtIEY=
 github.com/Microsoft/go-winio v0.5.2/go.mod h1:WpS1mjBmmwHBEWmogvA2mj8546UReBk4v8QkMxJ6pZY=
@@ -64,6 +66,8 @@ github.com/google/go-cmp v0.5.9 h1:O2Tfq5qg4qc4AmwVlvv0oLiVAGB7enBSJ2x2DqQFi38=
 github.com/google/uuid v1.1.1/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
 github.com/google/uuid v1.3.1 h1:KjJaJ9iWZ3jOFZIf1Lqf4laDRCasjl0BCmnEGxkdLb4=
 github.com/google/uuid v1.3.1/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
+github.com/google/uuid v1.4.0 h1:MtMxsa51/r9yyhkyLsVeVt0B+BGQZzpQiTQ4eHZ8bc4=
+github.com/google/uuid v1.4.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
 github.com/gopackage/ddp v0.0.6 h1:AsTiDLXpiMA6/pxE72J6AHnOt1Hp6uyQaIgfMx3ZAbQ=
 github.com/gopackage/ddp v0.0.6/go.mod h1:3hUXYG6C/6JsoxKsQaK7st09+GP9RZBFPzyAlU/0SLg=
 github.com/gorilla/websocket v1.5.0 h1:PPwGk2jz7EePpoHN/+ClbZu8SPxiqlu12wZP/3sWmnc=
@@ -161,6 +165,8 @@ github.com/pion/webrtc/v3 v3.2.21 h1:c8fy5JcqJkAQBwwy3Sk9huQLTBUSqaggyRlv9Lnh2zY
 github.com/pion/webrtc/v3 v3.2.21/go.mod h1:vVURQTBOG5BpWKOJz3nlr23NfTDeyKVmubRNqzQp+Tg=
 github.com/pion/webrtc/v4 v4.0.0-beta.5 h1:mW4Z8I50IG2ATa9i6tgClGMTdvTUHrxfAefReI0V2QE=
 github.com/pion/webrtc/v4 v4.0.0-beta.5/go.mod h1:epqb0qKpAf5GWPMeDmK1W9Za+dJqlDcx4iKp7+aem6I=
+github.com/pion/webrtc/v4 v4.0.0-beta.6 h1:swTwlzDY+1zDtW7ogXjNwlUY0xW733UUIAUMNUTCkPw=
+github.com/pion/webrtc/v4 v4.0.0-beta.6/go.mod h1:UcyD8jIeTkFqfYJqoHT9qwUSmrtacKaXxgOEujOdhZ8=
 github.com/pkg/errors v0.8.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
 github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=
 github.com/pkg/errors v0.9.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=

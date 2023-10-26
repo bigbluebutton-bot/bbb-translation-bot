@@ -120,39 +120,19 @@ func main() {
 
 	sc.OnDisconnected(func(message string) {
 		fmt.Println("Disconnected from server.")
+		os.Exit(1)
 	})
 
 	sc.OnTimeout(func(message string) {
 		fmt.Println("Connection to server timed out.")
+		os.Exit(1)
 	})
 
-	oldtext := ""
-	sc.OnTCPMessage(func(newtext string) {
-		fmt.Println("TCP message event:", newtext)
+	sc.OnTCPMessage(func(text string) {
+		fmt.Println("TCP message event:", text)
+		validtext := strings.ToValidUTF8(text, "")
 
-		newWords := ""
-		newWordsSlice := strings.Split(newtext, " ")
-		oldWordsSlice := strings.Split(oldtext, " ")
-
-		startnewwords := false
-		for count, word := range newWordsSlice {
-			if count >= len(oldWordsSlice) {
-				startnewwords = true
-			}
-			
-			if !startnewwords {
-				if word != oldWordsSlice[count] {
-					startnewwords = true
-				}
-			} else {
-				newWords += word + " "
-			}
-		}
-		oldtext = newtext
-	
-		//newWords = strings.TrimSpace(newWords)
-
-		err = enCapture.SendText(newWords)
+		err = enCapture.SetText(validtext)
 		if err != nil {
 			panic(err)
 		}
@@ -225,7 +205,7 @@ func main() {
 	})
 
 
-	time.Sleep(20 * time.Second)
+	time.Sleep(200 * time.Second)
 
 	if err := audio.Close(); err != nil {
 		panic(err)
