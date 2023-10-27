@@ -33,7 +33,8 @@ class Client:
         # Thread safe Queue for passing data from the threaded recording callback.
         self.data_queue = Queue()
 
-        self.transcription = ['']
+        # self.transcription = ['']
+        self.transcription  = ""
 
         self.phrase_complete = False
 
@@ -140,14 +141,8 @@ def main():
 
                 # Pull raw recorded audio from the queue.
                 if not client.data_queue.empty():
-                    client.phrase_complete = False
-                    # If enough time has passed between recordings, consider the phrase complete.
-                    # Clear the current working audio buffer to start over with the new data.
-                    if client.phrase_time and now - client.phrase_time > timedelta(seconds=phrase_timeout):
-                        client.last_sample = bytes()
-                        client.phrase_complete = True
-                    # This is the last time we received new audio data from the queue.
-                    client.phrase_time = now
+                    if client.phrase_time is None:
+                        client.phrase_time = now
 
                     # Concatenate our current audio data with the latest audio data.
                     while not client.data_queue.empty():
@@ -167,31 +162,23 @@ def main():
                     result = audio_model.transcribe(client.temp_file, fp16=torch.cuda.is_available(), task = args.task)
                     text = result['text'].strip()
 
-                    # If we detected a pause between recordings, add a new item to our transcripion.
-                    # Otherwise edit the existing one.
-                    if client.phrase_complete:
-                        client.transcription.append(text)
-                    else:
-                        client.transcription[-1] = text
+                    client.transcription = text
 
                     logging.info(str.encode(text))
 
                     # send text to client
                     try:
-                        tx = ""
-                        for line in client.transcription:
-                            tx = tx + line
-                        # logging.info(str.encode(tx))
-                        client.send(str.encode(tx))
+                        client.send(str.encode(text))
                     except:
                         pass
 
-                    # # Clear the console to reprint the updated transcription.
-                    # os.system('cls' if os.name=='nt' else 'clear')
-                    # for line in transcription:
-                    #     print(line)
-                    # # Flush stdout.
-                    # print('', end='', flush=True)
+
+                    # If enough time has passed between recordings, consider the phrase complete.
+                    # Clear the current working audio buffer to start over with the new data.
+                    #if client.phrase_time and now - client.phrase_time > timedelta(seconds=phrase_timeout):
+                    #    print("Clear buffer")
+                    #    client.last_sample = bytes()
+                    #    client.phrase_time = None
 
         # if KeyboardInterrupt stop. If everything else stop and show error.
         except (KeyboardInterrupt, Exception) as e:
