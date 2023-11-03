@@ -3,6 +3,7 @@
 import argparse
 import io
 import os
+import threading
 import speech_recognition as sr
 import whisper
 import torch
@@ -14,11 +15,33 @@ from queue import Queue
 from tempfile import NamedTemporaryFile
 from time import sleep
 from sys import platform
+from flask import Flask
+
+app = Flask(__name__)
 
 from StreamServer import Server
 
 
 logging.basicConfig(level=logging.INFO)
+
+
+HOST = os.getenv('TRANSCRIPTION_SERVER_HOST', "0.0.0.0")
+EXTERNALHOST = os.getenv('TRANSCRIPTION_SERVER_HOST', "127.0.0.1")
+TCPPORT = int(os.getenv('TRANSCRIPTION_SERVER_PORT', 5000))
+UDPPORT = int(os.getenv('TRANSCRIPTION_SERVER_PORT_UDP', 5001))
+SECRET_TOKEN = os.getenv('TRANSCRIPTION_SERVER_SECRET', "your_secret_token")
+
+
+STATUS = "starting" # starting, running, stopping, stopped
+@app.route('/health', methods=['GET'])
+def healthcheck():
+    global STATUS
+    logging.info(STATUS)
+    if STATUS == "running":
+        return STATUS, 200
+    else:
+        return STATUS, 503
+
 
 
 class Client:
@@ -45,14 +68,19 @@ class Client:
     def send(self, data):
         self._client.send_message(data)
 
-
+webserverthread = None
 
 def main():
+    # Start in a new thread the flask server.
+    global STATUS
+    webserverthread = threading.Thread(target=app.run, kwargs={'debug': False, 'host': "0.0.0.0", 'port': 8001})
+    webserverthread.start()
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", default="medium", help="Model to use",
                         choices=["tiny", "base", "small", "medium", "large"])
-    parser.add_argument("--non_english", action='store_true',
-                        help="Don't use the english model.")
+    parser.add_argument("--only_english", action='store_true',
+                        help="Only use the english model.")
     parser.add_argument("--energy_threshold", default=1000,
                         help="Energy level for mic to detect.", type=int)
     parser.add_argument("--record_timeout", default=2,
@@ -83,7 +111,7 @@ def main():
         
     # Load / Download model
     model = args.model
-    if args.model != "large" and not args.non_english:
+    if args.model != "large" and args.only_english:
         model = model + ".en"
     audio_model = whisper.load_model(model)
 
@@ -93,17 +121,17 @@ def main():
     # temp_file = NamedTemporaryFile().name
     # transcription = ['']
 
-    SECRET_TOKEN = "your_secret_token"
-    srv = Server("0.0.0.0", 5000, 5001, SECRET_TOKEN, 4096, 5, 10, 1024, "172.30.62.194")
+
+    srv = Server(HOST, TCPPORT, UDPPORT, SECRET_TOKEN, 4096, 5, 10, 1024, EXTERNALHOST)
     def OnConnected(c):
-        print("Connected by", c.tcp_address())
+        logging.info(f"Connected by {c.tcp_address()}")
 
         c.on_disconnected(lambda c: 
-            print("Disconnected by", c.tcp_address())
+            logging.info(f"Disconnected by {c.tcp_address()}")
         )
 
         c.on_timeout(lambda c:
-            print("Timeout by", c.tcp_address())
+            logging.info(f"Timeout by {c.tcp_address()}")
         )
 
         newclient = Client(c)
@@ -121,14 +149,15 @@ def main():
         c.on_udp_message(onmsg)
     
     srv.on_connected(OnConnected)
-    print("Starting server: 127.0.0.1:5000...")
+    logging.info(f"Starting server: {HOST}:{TCPPORT}...")
     srv.start()
+    STATUS = "running"
 
 
 
 
     # Cue the user that we're ready to go.
-    print("Model loaded.\n")
+    logging.info("Model loaded.\n")
 
     while True:
         try:
@@ -176,7 +205,7 @@ def main():
                     # If enough time has passed between recordings, consider the phrase complete.
                     # Clear the current working audio buffer to start over with the new data.
                     #if client.phrase_time and now - client.phrase_time > timedelta(seconds=phrase_timeout):
-                    #    print("Clear buffer")
+                    #    logging.info("Clear buffer")
                     #    client.last_sample = bytes()
                     #    client.phrase_time = None
 
@@ -188,10 +217,10 @@ def main():
                 logging.error(e)
             break
 
+    STATUS = "stopping"
     srv.stop()
-    # print("\n\nTranscription:")
-    # for line in transcription:
-    #     print(line)
+    webserverthread.join()
+    STATUS = "stopped"
 
 
 if __name__ == "__main__":

@@ -3,7 +3,7 @@ module client/test
 go 1.20
 
 require (
-	github.com/ITLab-CC/bigbluebutton-bot v0.0.0-20231026161803-ca176ffc9d25
+	github.com/ITLab-CC/bigbluebutton-bot v0.1.0
 	github.com/pion/rtp v1.8.2
 	github.com/pion/webrtc/v3 v3.2.21
 	github.com/pion/webrtc/v4 v4.0.0-beta.6

@@ -1,0 +1,36 @@
+{
+    "bbb":{
+       "api":{
+          "url":"https://example.com/bigbluebutton/api/",
+          "secret":"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+          "sha":"SHA256"
+       },
+       "client":{
+          "url":"https://example.com/html5client/",
+          "ws":"wss://example.com/html5client/websocket"
+       },
+       "pad":{
+          "url":"https://example.com/pad/",
+          "ws":"wss://example.com/pad/"
+       },
+       "webrtc":{
+          "ws":"wss://example.com/bbb-webrtc-sfu"
+       }
+    },
+    "changeset": {
+        "external": "false",
+        "host": "127.0.0.1",
+        "port": "5051"
+    },
+    "tt":{
+       "transcription-server":{
+          "host":"127.0.0.1",
+          "port":"5000",
+          "secret":"your_secret_token"
+       },
+       "translation-server":{
+         "url":"https://127.0.0.1/",
+         "secret":""
+      }
+    }
+}

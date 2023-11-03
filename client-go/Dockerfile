@@ -1,0 +1,23 @@
+# Start by building the application.
+FROM golang:alpine as build
+
+WORKDIR /go/src/app
+COPY *.go go.mod go.sum ./
+
+RUN go mod tidy
+
+RUN go get .
+
+
+# build 
+RUN CGO_ENABLED=0 go build -o /go/bin/app
+
+# ------------------------------------------------------
+# Now copy it into our base image.
+FROM gcr.io/distroless/static-debian11
+
+# copy from build image to this image
+COPY --from=build /go/bin/* /
+
+# set start command
+CMD ["/app"]

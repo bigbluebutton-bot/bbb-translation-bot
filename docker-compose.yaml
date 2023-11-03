@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  bot:
+    container_name: bot
+    build:
+      context: ./client-go
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    networks:
+      - bbb-bot
+    depends_on:
+      - changeset-server
+      - transcription-server
+
+  changeset-server:
+    container_name: changeset-server
+    build:
+      context: https://github.com/JulianKropp/Changeset-grpc.git
+      dockerfile: Dockerfile
+    networks:
+      - bbb-bot
+
+  transcription-server:
+    container_name: transcription-server
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    networks:
+      - bbb-bot
+
+
+networks:
+  bbb-bot:
+    driver: bridge

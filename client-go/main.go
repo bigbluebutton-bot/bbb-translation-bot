@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -23,11 +25,16 @@ func main() {
 
 	conf := readConfig("config.json")
 
+	// Wait for the transcription server to start by making a http request to http://{conf.TT.TranscriptionServer.Host}:8001/health
+	// Retry 10 times with 10 second delay
+	waitForServer(conf)
+
+
+
 	bbbapi, err := api.NewRequest(conf.BBB.API.URL, conf.BBB.API.Secret, conf.BBB.API.SHA)
 	if err != nil {
 		panic(err)
 	}
-
 
 	//API-Requests
 	newmeeting, err := bbbapi.CreateMeeting("name", "meetingID", "attendeePW", "moderatorPW", "welcome text", false, false, false, 12345)
@@ -36,11 +43,7 @@ func main() {
 	}
 	fmt.Printf("New meeting \"%s\" was created.\n", newmeeting.MeetingName)
 
-
-
 	fmt.Println("-----------------------------------------------")
-
-
 
 	fmt.Println("All meetings:")
 	meetings, err := bbbapi.GetMeetings()
@@ -52,11 +55,7 @@ func main() {
 		fmt.Println(bbbapi.IsMeetingRunning(meeting.MeetingID))
 	}
 
-
-
 	fmt.Println("-----------------------------------------------")
-
-
 
 	url, err := bbbapi.JoinGetURL(newmeeting.MeetingID, "TestUser", true)
 	if err != nil {
@@ -66,11 +65,7 @@ func main() {
 
 	time.Sleep(1 * time.Second)
 
-
-
 	fmt.Println("-----------------------------------------------")
-
-
 
 	client, err := bot.NewClient(conf.BBB.Client.URL, conf.BBB.Client.WS, conf.BBB.Pad.URL, conf.BBB.Pad.WS, conf.BBB.API.URL, conf.BBB.API.Secret, conf.BBB.WebRTC.WS)
 	if err != nil {
@@ -91,8 +86,8 @@ func main() {
 
 		fmt.Println("[" + msg.SenderName + "]: " + msg.Message)
 
-		if(msg.Sender != client.InternalUserID) {
-			if(msg.Message == "ping") {
+		if msg.Sender != client.InternalUserID {
+			if msg.Message == "ping" {
 				fmt.Println("Sending pong")
 				client.SendChatMsg("pong", msg.ChatId)
 			}
@@ -102,17 +97,29 @@ func main() {
 		panic(err)
 	}
 
-	enCapture, err := client.CreateCapture("en")
+	chsetExternal, err := strconv.ParseBool(conf.ChangeSet.External)
+	if err != nil {
+		panic(err)
+	}
+	chsetHost := conf.ChangeSet.Host
+	chsetPort, err := strconv.Atoi(conf.ChangeSet.Port)
 	if err != nil {
 		panic(err)
 	}
 
+	enCapture, err := client.CreateCapture("en", chsetExternal, chsetHost, chsetPort)
+	if err != nil {
+		panic(err)
+	}
 
+	transcriptionHost := conf.TT.TranscriptionServer.Host
+	transcriptionPort, err := strconv.Atoi(conf.TT.TranscriptionServer.Port)
+	if err != nil {
+		panic(err)
+	}
+	transcriptionSecret := conf.TT.TranscriptionServer.Secret
 
-
-	
-
-	sc := NewStreamClient("172.30.62.194", 5000, true, "your_secret_token")
+	sc := NewStreamClient(transcriptionHost, transcriptionPort, true, transcriptionSecret)
 
 	sc.OnConnected(func(message string) {
 		fmt.Println("Connected to server.")
@@ -145,7 +152,6 @@ func main() {
 	}
 	defer sc.Close()
 
-
 	audio := client.CreateAudioChannel()
 
 	err = audio.ListenToAudio()
@@ -175,7 +181,6 @@ func main() {
 		fmt.Println("Codec Channels: " + fmt.Sprint(track.Codec().Channels))
 		fmt.Println("Codec SDPFmtpLine: " + track.Codec().SDPFmtpLine)
 
-	
 		go func() {
 			buffer := make([]byte, 1024)
 			for {
@@ -189,7 +194,7 @@ func main() {
 					fmt.Println("Error during audio track read:", readErr)
 					return
 				}
-	
+
 				rtpPacket := &rtp.Packet{}
 				if err := rtpPacket.Unmarshal(buffer[:n]); err != nil {
 					fmt.Println("Error during RTP packet unmarshal:", err)
@@ -204,30 +209,87 @@ func main() {
 		}()
 	})
 
-
-	time.Sleep(200 * time.Second)
-
-	if err := audio.Close(); err != nil {
-		panic(err)
+	for {
+		time.Sleep(1 * time.Second)
 	}
 
-	
+	// if err := audio.Close(); err != nil {
+	// 	panic(err)
+	// }
 
-	fmt.Println("Bot leaves " + newmeeting.MeetingName)
-	err = client.Leave()
-	if err != nil {
-		panic(err)
+	// fmt.Println("Bot leaves " + newmeeting.MeetingName)
+	// err = client.Leave()
+	// if err != nil {
+	// 	panic(err)
+	// }
+}
+
+	// Wait for the transcription server to start by making a http request to http://{conf.TT.TranscriptionServer.Host}:{conf.TT.TranscriptionServer.Port}/health
+	// Retry 10 times with 10 second delay
+func waitForServer(conf config) {
+	// Define the URL using the configuration values
+	url := fmt.Sprintf("http://%s:%s/health", conf.TT.TranscriptionServer.Host, "8001")
+
+	// Try to connect to the server with retries
+	for {
+		resp, err := http.Get(url)
+		if err != nil {
+			fmt.Println("Waiting for transcription server to start...")
+			time.Sleep(10 * time.Second)
+		} else {
+			// Don't forget to close the response body when you're done with it
+			resp.Body.Close()
+
+			// If the status code is 200, the server is up
+			if resp.StatusCode == http.StatusOK {
+				fmt.Println("Transcription server is up and running.")
+				return
+			}
+
+			fmt.Println("Server is not ready yet...")
+			time.Sleep(10 * time.Second)
+		}
 	}
 }
 
-
-
-
-
-
-
-
-
+/*
+{
+    "bbb":{
+       "api":{
+          "url":"https://example.com/bigbluebutton/api/",
+          "secret":"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+          "sha":"SHA256"
+       },
+       "client":{
+          "url":"https://example.com/html5client/",
+          "ws":"wss://example.com/html5client/websocket"
+       },
+       "pad":{
+          "url":"https://example.com/pad/",
+          "ws":"wss://example.com/pad/"
+       },
+       "webrtc":{
+          "ws":"wss://example.com/bbb-webrtc-sfu"
+       }
+    },
+    "changeset": {
+        "external": "false",
+        "host": "127.0.0.1",
+        "port": "50051"
+    },
+    "tt":{
+       "transcription-server":{
+          "host":"172.30.62.203",
+          "port":"5000",
+          "secret":"your_secret_token"
+       },
+       "translation-server":{
+          "host":"172.30.62.203",
+          "secret":""
+       }
+    }
+}
+*/
 
 type configAPI struct {
 	URL    string  `json:"url"`
@@ -250,42 +312,86 @@ type configWebRTC struct {
 }
 
 type configBBB struct {
-	API    configAPI	`json:"api"`
-	Client configClient	`json:"client"`
-	Pad configPad		`json:"pad"`
+	API    configAPI    `json:"api"`
+	Client configClient `json:"client"`
+	Pad    configPad    `json:"pad"`
 	WebRTC configWebRTC `json:"webrtc"`
 }
 
 type config struct {
 	BBB configBBB `json:"bbb"`
+	ChangeSet configChangeSet `json:"changeset"`
+	TT  configTT  `json:"tt"`
+}
+
+type configChangeSet struct {
+	External string   `json:"external"`
+	Host     string `json:"host"`
+	Port     string    `json:"port"`
+}
+
+type configTT struct {
+	TranscriptionServer configTranscriptionServer `json:"transcription-server"`
+	TranslationServer   configTranslationServer   `json:"translation-server"`
+}
+
+type configTranscriptionServer struct {
+	Host   string `json:"host"`
+	Port   string    `json:"port"`
+	Secret string `json:"secret"`
+}
+
+type configTranslationServer struct {
+	Url   string `json:"url"`
+	Secret string `json:"secret"`
 }
 
 func readConfig(file string) config {
 	// Try to read from env
-	conf := config {
+	conf := config{
 		BBB: configBBB{
 			API: configAPI{
-				URL: os.Getenv("BBB_API_URL"),
+				URL:    os.Getenv("BBB_API_URL"),
 				Secret: os.Getenv("BBB_API_SECRET"),
-				SHA: api.SHA(os.Getenv("BBB_API_SHA")),
+				SHA:    api.SHA(os.Getenv("BBB_API_SHA")),
 			},
 			Client: configClient{
 				URL: os.Getenv("BBB_CLIENT_URL"),
-				WS: os.Getenv("BBB_CLIENT_WS"),
+				WS:  os.Getenv("BBB_CLIENT_WS"),
 			},
 			Pad: configPad{
 				URL: os.Getenv("BBB_PAD_URL"),
-				WS: os.Getenv("BBB_PAD_WS"),
+				WS:  os.Getenv("BBB_PAD_WS"),
 			},
 			WebRTC: configWebRTC{
 				WS: os.Getenv("BBB_WEBRTC_WS"),
 			},
 		},
+		ChangeSet: configChangeSet{
+			External: os.Getenv("CHANGESET_EXTERNAL"),
+			Host:     os.Getenv("CHANGESET_HOST"),
+			Port:     os.Getenv("CHANGESET_PORT"),
+		},
+		TT: configTT{
+			TranscriptionServer: configTranscriptionServer{
+				Host:   os.Getenv("TRANSCRIPTION_SERVER_HOST"),
+				Port:   os.Getenv("TRANSCRIPTION_SERVER_PORT"),
+				Secret: os.Getenv("TRANSCRIPTION_SERVER_SECRET"),
+			},
+			TranslationServer: configTranslationServer{
+				Url:   os.Getenv("TRANSLATION_SERVER_URL"),
+				Secret: os.Getenv("TRANSLATION_SERVER_SECRET"),
+			},
+		},
 	}
 
-	if (conf.BBB.API.URL != "" && conf.BBB.API.Secret != "" && conf.BBB.API.SHA != "" &&
+	if conf.BBB.API.URL != "" && conf.BBB.API.Secret != "" && conf.BBB.API.SHA != "" &&
 		conf.BBB.Client.URL != "" && conf.BBB.Client.WS != "" &&
-		conf.BBB.Pad.URL != "" && conf.BBB.Pad.WS != ""){
+		conf.BBB.Pad.URL != "" && conf.BBB.Pad.WS != "" && 
+		conf.BBB.WebRTC.WS != "" && 
+		conf.ChangeSet.Host != "" && conf.ChangeSet.Port != "" &&
+		conf.TT.TranscriptionServer.Host  != "" && conf.TT.TranscriptionServer.Port != "" && conf.TT.TranscriptionServer.Secret != "" && 
+		conf.TT.TranslationServer.Url != "" && conf.TT.TranslationServer.Secret != "" {
 		fmt.Println("Using env variables for config")
 		return conf
 	}
@@ -293,18 +399,18 @@ func readConfig(file string) config {
 	// Open our jsonFile
 	jsonFile, err := os.Open(file)
 	// if we os.Open returns an error then handle it
-	if (err != nil) {
+	if err != nil {
 		fmt.Println(err)
 	}
 	// defer the closing of our jsonFile so that we can parse it later on
 	defer jsonFile.Close()
 	// read our opened jsonFile as a byte array.
 	byteValue, err := io.ReadAll(jsonFile)
-	if(err != nil) {
+	if err != nil {
 		panic(err)
 	}
 	// we unmarshal our byteArray which contains our jsonFile's content into conf
-	json.Unmarshal([]byte(byteValue), &conf) 
+	json.Unmarshal([]byte(byteValue), &conf)
 
 	return conf
 }
