@@ -1,4 +1,4 @@
-FROM pytorch/pytorch AS build-env
+FROM pytorch/pytorch:2.1.0-cuda12.1-cudnn8-runtime AS build-env
 
 RUN apt update && apt install -y git
 

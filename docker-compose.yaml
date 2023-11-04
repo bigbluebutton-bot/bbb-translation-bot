@@ -1,4 +1,4 @@
-version: '3.8'
+version: '3.9'
 
 services:
   bot:
@@ -21,6 +21,8 @@ services:
       dockerfile: Dockerfile
     networks:
       - bbb-bot
+    # ports:
+    #   - "5051:5051"
 
   transcription-server:
     container_name: transcription-server
@@ -31,6 +33,19 @@ services:
       - .env
     networks:
       - bbb-bot
+    # ports:
+    #   - "8001:8001"
+    #   - "5000:5000"
+    #   - "5001:5001"
+    ipc: host
+    tty: true
+    stdin_open: true
+    deploy:
+      resources:
+        reservations:
+          devices:
+          - driver: nvidia
+            capabilities: [gpu]
 
 
 networks:
