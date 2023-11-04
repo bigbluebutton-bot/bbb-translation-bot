@@ -8,12 +8,6 @@ import (
 	"sync"
 )
 
-type status int
-const (
-	CONNECTED status = iota
-	DISCONNECTED
-)
-
 type StreamClient struct {
 	tcpClient  *TCPclient
 	udpClient  *UDPclient
@@ -71,6 +65,7 @@ func (sc *StreamClient) getMessageType(message string) (MessageType, error) {
 }
 
 func (sc *StreamClient) Connect() error {
+	sc.status = CONNECTING
 
 	sc.tcpClient.OnMessage(func(message string) {
 		if sc.status == CONNECTED {
@@ -171,7 +166,7 @@ func (sc *StreamClient) Write(p []byte) (int, error) {
 }
 
 func (sc *StreamClient) Close() {
-	sc.status = DISCONNECTED
+	sc.status = DISCONNECTING
 	if sc.tcpClient != nil {
 		sc.tcpClient.Close()
 	}

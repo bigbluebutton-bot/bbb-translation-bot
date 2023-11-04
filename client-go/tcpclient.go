@@ -14,6 +14,14 @@ import (
 	"time"
 )
 
+type status int
+const (
+	CONNECTED status = iota
+	CONNECTING
+	DISCONNECTED
+	DISCONNECTING
+)
+
 type TCPclient struct {
 	address           string
 	connection        net.Conn
@@ -29,11 +37,15 @@ type TCPclient struct {
 
 	Secret_token string
 
+	status status
+
 	messageEvent      *Event
 	connectedEvent    *Event
 	disconnectedEvent *Event
 	timeoutEvent      *Event
 	pingEvent         *Event
+
+	messageEventQueue *Event
 }
 
 func NewTCPclient(addr string, encryption bool) *TCPclient {
@@ -52,11 +64,15 @@ func NewTCPclient(addr string, encryption bool) *TCPclient {
 
 		Secret_token: "",
 
+		status: DISCONNECTED,
+
 		messageEvent:      NewEvent(),
 		connectedEvent:    NewEvent(),
 		disconnectedEvent: NewEvent(),
 		timeoutEvent:      NewEvent(),
 		pingEvent:         NewEvent(),
+
+		messageEventQueue: NewEvent(),
 	}
 }
 
@@ -139,6 +155,7 @@ func (c *TCPclient) exchangeKeys() error {
 }
 
 func (c *TCPclient) Connect() error {
+	c.status = CONNECTING
 	c.StopChan = make(chan bool)
 
 	var err error
@@ -183,10 +200,18 @@ func (c *TCPclient) Connect() error {
 	// Start ping loop
 	go c.sendPing()
 
+
+	// Add messageEventQueue to messageEvent
+	c.messageEvent = c.messageEventQueue
+	c.messageEventQueue = NewEvent()
+
+	c.status = CONNECTED
+
 	return nil
 }
 
 func (c *TCPclient) Close() {
+	c.status = DISCONNECTING
 	if !c.running {
 		return
 	}
@@ -194,6 +219,7 @@ func (c *TCPclient) Close() {
 	close(c.StopChan)
 	c.connection.Close()
 	c.disconnectedEvent.Emit("Disconnected from the server.")
+	c.status = DISCONNECTED
 }
 
 // Receve messages from the server
@@ -261,10 +287,15 @@ func (c *TCPclient) RemoveOnConnected(handler func(message string)) {
 }
 
 func (c *TCPclient) OnMessage(handler func(message string)) {
-	c.messageEvent.Add(handler)
+	if c.status != CONNECTED {
+		c.messageEventQueue.Add(handler)
+	} else {
+		c.messageEvent.Add(handler)
+	}
 }
 
 func (c *TCPclient) RemoveOnMessage(handler func(message string)) {
+	c.messageEventQueue.Remove(handler)
 	c.messageEvent.Remove(handler)
 }
 
