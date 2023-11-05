@@ -9,15 +9,28 @@ Follow these simple steps to quickly set up the BBB-Translation-Bot.
 ## Prerequisites
 
 ### Hardware
-Thsi setup was testet with a Nvidia RTX 2070 and RTX 3070 GPU. The GPU is used for the transcription and translation of the audio stream.
+This setup was testet with a Nvidia RTX 2070 and RTX 3070 GPU. The GPU is used for the transcription and translation of the audio stream.
+
+### Install Nvidia drivers for Ubuntu:
+Refer to the official [Nvidia documentation](https://docs.nvidia.com/datacenter/tesla/tesla-installation-notes/index.html#ubuntu-lts):
+```bash
+sudo apt update
+sudo apt install linux-headers-$(uname -r)
+distribution=$(. /etc/os-release;echo $ID$VERSION_ID | sed -e 's/\.//g')
+wget https://developer.download.nvidia.com/compute/cuda/repos/$distribution/x86_64/cuda-keyring_1.0-1_all.deb
+sudo dpkg -i cuda-keyring_1.0-1_all.deb
+sudo apt update
+sudo apt -y install cuda-drivers
+sudo reboot now
+```
 
 ### Docker with GPU support
 Ensure Docker with GPU support is installed on your system:
 
 ```bash
-sudo apt-get update && sudo apt-get upgrade -y
+sudo apt update && sudo apt upgrade -y
 curl -sSL https://get.docker.com | sh
-sudo apt-get install nvidia-container-runtime
+sudo apt install nvidia-container-runtime
 which nvidia-container-runtime-hook
 sudo systemctl restart docker
 docker run -it --rm --gpus all ubuntu nvidia-smi # Test GPU support
@@ -48,12 +61,12 @@ To set up the environment for development purposes, follow the instructions belo
 1. Install Nvidia drivers for Ubuntu:
 Refer to the official [Nvidia documentation](https://docs.nvidia.com/datacenter/tesla/tesla-installation-notes/index.html#ubuntu-lts):
     ```bash
-    sudo apt-get install linux-headers-$(uname -r)
+    sudo apt install linux-headers-$(uname -r)
     distribution=$(. /etc/os-release;echo $ID$VERSION_ID | sed -e 's/\.//g')
     wget https://developer.download.nvidia.com/compute/cuda/repos/$distribution/x86_64/cuda-keyring_1.0-1_all.deb
     sudo dpkg -i cuda-keyring_1.0-1_all.deb
-    sudo apt-get update
-    sudo apt-get -y install cuda-drivers
+    sudo apt update
+    sudo apt -y install cuda-drivers
     sudo reboot now
     ```
 
