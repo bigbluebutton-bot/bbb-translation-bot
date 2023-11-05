@@ -94,8 +94,8 @@ class Client:
     def send(self, data):
         self._client.send_message(data)
 
-    def close(self):
-        self._client.close()
+    def stop(self):
+        self._client.stop()
 
 
 
@@ -240,7 +240,7 @@ def main():
                 break   # Stop if Ctrl+C is pressed
             else:
                 logging.error(e)
-                client.close()
+                client.stop()
 
 
     # Stop server
