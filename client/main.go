@@ -25,11 +25,9 @@ func main() {
 
 	conf := readConfig("config.json")
 
-	// Wait for the transcription server to start by making a http request to http://{conf.TT.TranscriptionServer.Host}:8001/health
+	// Wait for the transcription server to start by making a http request to http://{conf.TranscriptionServer.Host}:8001/health
 	// Retry 10 times with 10 second delay
 	waitForServer(conf)
-
-
 
 	bbbapi, err := api.NewRequest(conf.BBB.API.URL, conf.BBB.API.Secret, conf.BBB.API.SHA)
 	if err != nil {
@@ -112,12 +110,12 @@ func main() {
 		panic(err)
 	}
 
-	transcriptionHost := conf.TT.TranscriptionServer.Host
-	transcriptionPort, err := strconv.Atoi(conf.TT.TranscriptionServer.Port)
+	transcriptionHost := conf.TranscriptionServer.Host
+	transcriptionPort, err := strconv.Atoi(conf.TranscriptionServer.PortTCP)
 	if err != nil {
 		panic(err)
 	}
-	transcriptionSecret := conf.TT.TranscriptionServer.Secret
+	transcriptionSecret := conf.TranscriptionServer.Secret
 
 	sc := NewStreamClient(transcriptionHost, transcriptionPort, true, transcriptionSecret)
 
@@ -224,11 +222,11 @@ func main() {
 	// }
 }
 
-	// Wait for the transcription server to start by making a http request to http://{conf.TT.TranscriptionServer.Host}:{conf.TT.TranscriptionServer.Port}/health
-	// Retry 10 times with 10 second delay
+// Wait for the transcription server to start by making a http request to http://{conf.TranscriptionServer.Host}:{conf.TranscriptionServer.Port}/health
+// Retry 10 times with 10 second delay
 func waitForServer(conf config) {
 	// Define the URL using the configuration values
-	url := fmt.Sprintf("http://%s:%s/health", conf.TT.TranscriptionServer.Host, "8001")
+	url := fmt.Sprintf("http://%s:%s/health", conf.TranscriptionServer.Host, "8001")
 
 	// Try to connect to the server with retries
 	for {
@@ -254,40 +252,38 @@ func waitForServer(conf config) {
 
 /*
 {
-    "bbb":{
-       "api":{
-          "url":"https://example.com/bigbluebutton/api/",
-          "secret":"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-          "sha":"SHA256"
+   "bbb": {
+       "api": {
+           "url": "https://example.com/bigbluebutton/api/",
+           "secret": "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+           "sha": "SHA256"
        },
-       "client":{
-          "url":"https://example.com/html5client/",
-          "ws":"wss://example.com/html5client/websocket"
+       "client": {
+           "url": "https://example.com/html5client/",
+           "ws": "wss://example.com/html5client/websocket"
        },
-       "pad":{
-          "url":"https://example.com/pad/",
-          "ws":"wss://example.com/pad/"
+       "pad": {
+           "url": "https://example.com/pad/",
+           "ws": "wss://example.com/pad/"
        },
-       "webrtc":{
-          "ws":"wss://example.com/bbb-webrtc-sfu"
+       "webrtc": {
+           "ws": "wss://example.com/bbb-webrtc-sfu"
        }
-    },
-    "changeset": {
-        "external": "false",
-        "host": "127.0.0.1",
-        "port": "50051"
-    },
-    "tt":{
-       "transcription-server":{
-          "host":"172.30.62.203",
-          "port":"5000",
-          "secret":"your_secret_token"
-       },
-       "translation-server":{
-          "host":"172.30.62.203",
-          "secret":""
-       }
-    }
+   },
+   "changeset": {
+       "external": "false",
+       "host": "127.0.0.1",
+       "port": "5051"
+   },
+   "transcription_server": {
+       "host": "127.0.0.1",
+       "port_tcp": "5000",
+       "secret": "your_secret_token"
+   },
+   "translation_server": {
+       "url": "translation-server",
+       "secret": "your_secret_token"
+   }
 }
 */
 
@@ -319,30 +315,26 @@ type configBBB struct {
 }
 
 type config struct {
-	BBB configBBB `json:"bbb"`
-	ChangeSet configChangeSet `json:"changeset"`
-	TT  configTT  `json:"tt"`
+	BBB                 configBBB                 `json:"bbb"`
+	ChangeSet           configChangeSet           `json:"changeset"`
+	TranscriptionServer configTranscriptionServer `json:"transcription_server"`
+	TranslationServer   configTranslationServer   `json:"translation_server"`
 }
 
 type configChangeSet struct {
-	External string   `json:"external"`
+	External string `json:"external"`
 	Host     string `json:"host"`
-	Port     string    `json:"port"`
-}
-
-type configTT struct {
-	TranscriptionServer configTranscriptionServer `json:"transcription-server"`
-	TranslationServer   configTranslationServer   `json:"translation-server"`
+	Port     string `json:"port"`
 }
 
 type configTranscriptionServer struct {
-	Host   string `json:"host"`
-	Port   string    `json:"port"`
-	Secret string `json:"secret"`
+	Host    string `json:"host"`
+	PortTCP string `json:"port_tcp"`
+	Secret  string `json:"secret"`
 }
 
 type configTranslationServer struct {
-	Url   string `json:"url"`
+	Url    string `json:"url"`
 	Secret string `json:"secret"`
 }
 
@@ -372,26 +364,24 @@ func readConfig(file string) config {
 			Host:     os.Getenv("CHANGESET_HOST"),
 			Port:     os.Getenv("CHANGESET_PORT"),
 		},
-		TT: configTT{
-			TranscriptionServer: configTranscriptionServer{
-				Host:   os.Getenv("TRANSCRIPTION_SERVER_HOST"),
-				Port:   os.Getenv("TRANSCRIPTION_SERVER_PORT"),
-				Secret: os.Getenv("TRANSCRIPTION_SERVER_SECRET"),
-			},
-			TranslationServer: configTranslationServer{
-				Url:   os.Getenv("TRANSLATION_SERVER_URL"),
-				Secret: os.Getenv("TRANSLATION_SERVER_SECRET"),
-			},
+		TranscriptionServer: configTranscriptionServer{
+			Host:    os.Getenv("TRANSCRIPTION_SERVER_HOST"),
+			PortTCP: os.Getenv("TRANSCRIPTION_SERVER_PORT_TCP"),
+			Secret:  os.Getenv("TRANSCRIPTION_SERVER_SECRET"),
+		},
+		TranslationServer: configTranslationServer{
+			Url:    os.Getenv("TRANSLATION_SERVER_URL"),
+			Secret: os.Getenv("TRANSLATION_SERVER_SECRET"),
 		},
 	}
 
 	if conf.BBB.API.URL != "" && conf.BBB.API.Secret != "" && conf.BBB.API.SHA != "" &&
 		conf.BBB.Client.URL != "" && conf.BBB.Client.WS != "" &&
-		conf.BBB.Pad.URL != "" && conf.BBB.Pad.WS != "" && 
-		conf.BBB.WebRTC.WS != "" && 
+		conf.BBB.Pad.URL != "" && conf.BBB.Pad.WS != "" &&
+		conf.BBB.WebRTC.WS != "" &&
 		conf.ChangeSet.Host != "" && conf.ChangeSet.Port != "" &&
-		conf.TT.TranscriptionServer.Host  != "" && conf.TT.TranscriptionServer.Port != "" && conf.TT.TranscriptionServer.Secret != "" && 
-		conf.TT.TranslationServer.Url != "" && conf.TT.TranslationServer.Secret != "" {
+		conf.TranscriptionServer.Host != "" && conf.TranscriptionServer.PortTCP != "" && conf.TranscriptionServer.Secret != "" &&
+		conf.TranslationServer.Url != "" && conf.TranslationServer.Secret != "" {
 		fmt.Println("Using env variables for config")
 		return conf
 	}
