@@ -76,6 +76,7 @@ class Server:
         self._socket.bind((self._host, self._port))
 
         self._main_thread = threading.Thread(target=self._listen)
+        self._main_thread.daemon = True  # This will ensure the thread stops when the main thread exits
         self._main_thread.start()
 
         logging.info(f"Server started at {self._host}:{self._port}")
@@ -100,7 +101,7 @@ class Server:
                 client.stop()
 
         self._main_thread.join()
-        logging.info("UDP server stopped.")
+        logging.debug("UDP server stopped.")
 
 
 

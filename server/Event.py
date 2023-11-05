@@ -33,6 +33,7 @@ class EventHandler:
                 # logging.debug(f"Emitting event with ID: {event_id}")
                 # Wrap the callback execution in a thread
                 t = threading.Thread(target=callback, args=args)
+                t.daemon = True  # This will ensure the thread stops when the main thread exits
                 threads.append(t)
                 t.start()
 

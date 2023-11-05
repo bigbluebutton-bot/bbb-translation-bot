@@ -70,6 +70,7 @@ class Server:
         self._running = True
 
         self.main_accept_clients_thread = threading.Thread(target=self._accept_clients) # Create the thread here
+        self.main_accept_clients_thread.daemon = True  # This will ensure the thread stops when the main thread exits
         self._thread_pool = ThreadPoolExecutor(self.max_threads)  # Initialize a thread pool when server starts
 
         try:
