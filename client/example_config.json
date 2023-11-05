@@ -23,9 +23,10 @@
        "port": "5051"
    },
    "transcription_server": {
-       "host": "127.0.0.1",
+       "externalhost": "127.0.0.1",
        "port_tcp": "5000",
-       "secret": "your_secret_token"
+       "secret": "your_secret_token",
+       "healthcheckport": "8001"
    },
    "translation_server": {
        "url": "translation-server",

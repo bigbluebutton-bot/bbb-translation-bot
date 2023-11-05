@@ -110,7 +110,7 @@ func main() {
 		panic(err)
 	}
 
-	transcriptionHost := conf.TranscriptionServer.Host
+	transcriptionHost := conf.TranscriptionServer.ExternalHost
 	transcriptionPort, err := strconv.Atoi(conf.TranscriptionServer.PortTCP)
 	if err != nil {
 		panic(err)
@@ -226,7 +226,7 @@ func main() {
 // Retry 10 times with 10 second delay
 func waitForServer(conf config) {
 	// Define the URL using the configuration values
-	url := fmt.Sprintf("http://%s:%s/health", conf.TranscriptionServer.Host, "8001")
+	url := fmt.Sprintf("http://%s:%s/health", conf.TranscriptionServer.ExternalHost, conf.TranscriptionServer.HealthCheckPort)
 
 	// Try to connect to the server with retries
 	for {
@@ -278,7 +278,8 @@ func waitForServer(conf config) {
    "transcription_server": {
        "host": "127.0.0.1",
        "port_tcp": "5000",
-       "secret": "your_secret_token"
+       "secret": "your_secret_token",
+	   "healthcheckport": "8001"
    },
    "translation_server": {
        "url": "translation-server",
@@ -328,9 +329,10 @@ type configChangeSet struct {
 }
 
 type configTranscriptionServer struct {
-	Host    string `json:"host"`
+	ExternalHost    string `json:"externalhost"`
 	PortTCP string `json:"port_tcp"`
 	Secret  string `json:"secret"`
+	HealthCheckPort string `json:"healthcheckport"`
 }
 
 type configTranslationServer struct {
@@ -365,9 +367,10 @@ func readConfig(file string) config {
 			Port:     os.Getenv("CHANGESET_PORT"),
 		},
 		TranscriptionServer: configTranscriptionServer{
-			Host:    os.Getenv("TRANSCRIPTION_SERVER_HOST"),
+			ExternalHost:    os.Getenv("TRANSCRIPTION_SERVER_EXTERNAL_HOST"),
 			PortTCP: os.Getenv("TRANSCRIPTION_SERVER_PORT_TCP"),
 			Secret:  os.Getenv("TRANSCRIPTION_SERVER_SECRET"),
+			HealthCheckPort: os.Getenv("TRANSCRIPTION_SERVER_HEALTHCHECK_PORT"),
 		},
 		TranslationServer: configTranslationServer{
 			Url:    os.Getenv("TRANSLATION_SERVER_URL"),
@@ -380,7 +383,7 @@ func readConfig(file string) config {
 		conf.BBB.Pad.URL != "" && conf.BBB.Pad.WS != "" &&
 		conf.BBB.WebRTC.WS != "" &&
 		conf.ChangeSet.Host != "" && conf.ChangeSet.Port != "" &&
-		conf.TranscriptionServer.Host != "" && conf.TranscriptionServer.PortTCP != "" && conf.TranscriptionServer.Secret != "" &&
+		conf.TranscriptionServer.ExternalHost != "" && conf.TranscriptionServer.PortTCP != "" && conf.TranscriptionServer.Secret != "" && conf.TranscriptionServer.HealthCheckPort != "" &&
 		conf.TranslationServer.Url != "" && conf.TranslationServer.Secret != "" {
 		fmt.Println("Using env variables for config")
 		return conf
