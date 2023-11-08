@@ -26,13 +26,26 @@ sudo reboot now
 
 ### Docker with GPU support
 Ensure Docker with GPU support is installed on your system:
+Refer to the official [Nvidia documentation](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
 
 ```bash
-sudo apt update && sudo apt upgrade -y
+sudo apt update
+
 curl -sSL https://get.docker.com | sh
+
+curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg \
+  && curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
+    sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
+    sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list \
+  && \
+    sudo apt-get update
+
 sudo apt install nvidia-container-runtime
+
 which nvidia-container-runtime-hook
+
 sudo systemctl restart docker
+
 docker run -it --rm --gpus all ubuntu nvidia-smi # Test GPU support
 ```
 
