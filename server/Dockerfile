@@ -1,6 +1,6 @@
-FROM pytorch/pytorch:2.1.0-cuda12.1-cudnn8-runtime AS build-env
+FROM nvidia/cuda:12.2.2-devel-ubuntu22.04 AS build-env
 
-RUN apt update && apt install -y git
+RUN apt update && apt install -y git python3 python3-pip ffmpeg
 
 WORKDIR /app
 COPY *.py *.txt ./
