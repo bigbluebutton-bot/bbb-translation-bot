@@ -74,6 +74,8 @@ def healthcheck():
 class Client:
     def __init__(self, client):
 
+        self.mutex = threading.Lock()
+
         self._client = client
 
         # The last time a recording was retreived from the queue.
@@ -95,7 +97,10 @@ class Client:
         self._client.send_message(data)
 
     def stop(self):
-        self._client.stop()
+        with self.mutex:
+            self._client.stop()
+            slef.data_queue.clear()
+            self.last_sample = bytes()
 
 
 
@@ -130,6 +135,8 @@ def main():
     # Vars
     client_dict = {}        # Dictionary with all connected clients
     client_queue = Queue()  # Queue with clients which have data to process
+    client_dict_mutex = threading.Lock() # Mutex to lock the client_dict
+    client_queue_mutex = threading.Lock() # Mutex to lock the client_queue
 
     # Create server
     srv = Server(settings["HOST"], settings["TCPPORT"], settings["UDPPORT"], settings["SECRET_TOKEN"], 4096, 5, 10, 1024, settings["EXTERNALHOST"])
@@ -141,33 +148,40 @@ def main():
         # Create new client
         newclient = Client(c)
         logging.info(f"TEMP: {newclient.temp_file}")
-        client_dict[c] = newclient
+        with client_dict_mutex:
+            client_dict[c] = newclient
 
         # Handle disconnections
         def ondisconnedted(c):
             logging.info(f"Disconnected by {c.tcp_address()}")
             # Remove client from client_dict
-            if c in client_dict:
-                del client_dict[c]
+            with client_dict_mutex:
+                if c in client_dict:
+                    del client_dict[c]
         c.on_disconnected(ondisconnedted)
 
         # Handle timeouts
         def ontimeout(c):
             logging.info(f"Timeout by {c.tcp_address()}")
             # Remove client from client_dict
-            if c in client_dict:
-                del client_dict[c]
+            with client_dict_mutex:
+                if c in client_dict:
+                    del client_dict[c]
         c.on_timeout(ontimeout)
 
         # Handle messages
         def onmsg(c, data):
-            if not c in client_dict:
-                return
-            client = client_dict[c]
-            client.data_queue.put(data)
-            
-            if not client in client_queue.queue:
-                client_queue.put(client)
+            with client_dict_mutex:
+                if not c in client_dict:
+                    return
+                client = client_dict[c]
+                with client.mutex:
+                    client.data_queue.put(data)
+                
+                # Add client to client_queue if not already in it
+                with client_queue_mutex:
+                    if not client in client_queue.queue:
+                        client_queue.put(client)
         c.on_udp_message(onmsg)
     srv.on_connected(OnConnected)
 
@@ -185,6 +199,7 @@ def main():
         try:
             sleep(time_to_sleep)    # Infinite loops are bad for processors, must sleep.
 
+            # If there is no data to process, sleep for a bit.
             if client_queue.empty():
                 time_to_sleep = 0.25    # Set sleep time to 0.25 seconds if there is no data to process.
             else:
@@ -192,32 +207,44 @@ def main():
 
                 # Process data from client
                 now = datetime.utcnow()
-                client = client_queue.get()
+                client = None
+                with client_queue_mutex:
+                    client = client_queue.get()
+
+                last_sample = None
+                temp_file = None
 
                 # Pull raw recorded audio from the queue.
-                if not client.data_queue.empty():
-                    if client.phrase_time is None:
-                        client.phrase_time = now
+                with client.mutex:
+                    if not client.data_queue.empty():
+                        if client.phrase_time is None:
+                            client.phrase_time = now
 
-                    # Concatenate our current audio data with the latest audio data.
-                    while not client.data_queue.empty():
-                        data = client.data_queue.get()
-                        client.last_sample += data
+                        # Concatenate our current audio data with the latest audio data.
+                        while not client.data_queue.empty():
+                            data = client.data_queue.get()
+                            client.last_sample += data
 
-                    # # Write to file for debugging.
-                    # with open('/testing/sample.opus', 'wb') as f:
-                    #     f.write(client.last_sample)
+                    last_sample = client.last_sample
+                    temp_file = client.temp_file
 
-                    # Convert opus to wav
-                    opus_data = io.BytesIO(client.last_sample)
-                    opus_audio = AudioSegment.from_file(opus_data, format="ogg", frame_rate=48000, channels=2, sample_width=2)
-                    opus_audio.export(client.temp_file, format="wav")
+                # # Write to file for debugging.
+                # with open('/testing/sample.opus', 'wb') as f:
+                #     f.write(last_sample)
 
-                    # Convert audio to text using the model (if translation is enabled translate to english)
-                    result = audio_model.transcribe(client.temp_file, fp16=torch.cuda.is_available(), task = settings["TASK"])
-                    text = result['text'].strip()
+                # Convert opus to wav
+                opus_data = io.BytesIO(last_sample)
+                opus_audio = AudioSegment.from_file(opus_data, format="ogg", frame_rate=48000, channels=2, sample_width=2)
+                opus_audio.export(temp_file, format="wav")
+
+                # Convert audio to text using the model (if translation is enabled translate to english)
+                result = audio_model.transcribe(temp_file, fp16=torch.cuda.is_available(), task = settings["TASK"])
+                text = result['text'].strip()
+                logging.info(str.encode(text))
+
+                # Set transcription
+                with client.mutex:
                     client.transcription = text
-                    logging.info(str.encode(text))
 
                     # Send text to client
                     try:
@@ -226,13 +253,14 @@ def main():
                         pass
 
 
-                    # If enough time has passed between recordings, consider the phrase complete.
-                    # Clear the current working audio buffer to start over with the new data.
-                    #if client.phrase_time and now - client.phrase_time > timedelta(seconds=settings["RECORD_TIMEOUT):
-                    #    logging.info("Clear buffer")
-                    #    client.last_sample = bytes()
-                    #    client.phrase_time = None
-                    #    client.temp_file = NamedTemporaryFile().name
+                # If enough time has passed between recordings, consider the phrase complete.
+                # Clear the current working audio buffer to start over with the new data.
+                # if client.phrase_time and now - client.phrase_time > timedelta(seconds=settings["RECORD_TIMEOUT"]):
+                #     logging.info("Clear buffer")
+                #     with client.mutex:
+                #         client.last_sample = bytes()
+                #         client.phrase_time = None
+                #         client.temp_file = NamedTemporaryFile().name
 
         # if KeyboardInterrupt stop. If everything else stop and show error.
         except (KeyboardInterrupt, Exception) as e:
