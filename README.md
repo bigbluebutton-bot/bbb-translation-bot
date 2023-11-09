@@ -88,12 +88,19 @@ Refer to the official [Nvidia documentation](https://docs.nvidia.com/datacenter/
     cd server
     sudo apt update
     sudo apt install python3-pip python3-dev ffmpeg -y
+    python3 -m venv .translation-server
+    source .translation-server/bin/activate
     pip3 install -r requirements-server.txt --no-cache-dir
     ```
 
 3. Run the server:
     ```bash
     python3 server.py
+    ```
+
+4. Exit the virtual environment:
+    ```bash
+    deactivate
     ```
 
 ## Client Setup
