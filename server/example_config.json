@@ -2,7 +2,7 @@
     "transcription_server": {
         "model": "medium",
         "only_english": "false",
-        "record_timeout": 2.0,
+        "record_timeout": 10.0,
         "task": "transcribe",
         "host": "127.0.0.1",
         "external_host": "127.0.0.1",

@@ -16,6 +16,7 @@ from sys import platform
 from flask import Flask
 
 from StreamServer import Server
+from extract_ogg import get_header_frames as extract_ogg_header_frames
 
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -85,6 +86,9 @@ class Client:
         # Thread safe Queue for passing data from the threaded recording callback.
         self.data_queue = Queue()
 
+        self.oggs_opus_header_frames = bytes()
+        self.oggs_opus_header_frames_complete = False
+
         self.transcription  = ""
 
         self.phrase_complete = False
@@ -96,10 +100,18 @@ class Client:
     def send(self, data):
         self._client.send_message(data)
 
+    def clear_buffer(self):
+        if self.oggs_opus_header_frames_complete:
+            with self.mutex:
+                self.phrase_time = None
+                self.temp_file = NamedTemporaryFile().name
+
+                self.last_sample = self.oggs_opus_header_frames
+
     def stop(self):
         with self.mutex:
             self._client.stop()
-            slef.data_queue.clear()
+            self.data_queue = Queue()
             self.last_sample = bytes()
 
 
@@ -228,6 +240,16 @@ def main():
                     last_sample = client.last_sample
                     temp_file = client.temp_file
 
+                    # set header
+                    if client.oggs_opus_header_frames_complete == False:
+                        id_header_frame, comment_header_frames = extract_ogg_header_frames(last_sample)
+                        if id_header_frame is not None and len(comment_header_frames) > 0:
+                            client.oggs_opus_header_frames += id_header_frame.raw_data
+                            for frame in comment_header_frames:
+                                client.oggs_opus_header_frames += frame.raw_data
+                            client.oggs_opus_header_frames_complete = True
+                        continue
+
                 # # Write to file for debugging.
                 # with open('/testing/sample.opus', 'wb') as f:
                 #     f.write(last_sample)
@@ -255,12 +277,9 @@ def main():
 
                 # If enough time has passed between recordings, consider the phrase complete.
                 # Clear the current working audio buffer to start over with the new data.
-                # if client.phrase_time and now - client.phrase_time > timedelta(seconds=settings["RECORD_TIMEOUT"]):
-                #     logging.info("Clear buffer")
-                #     with client.mutex:
-                #         client.last_sample = bytes()
-                #         client.phrase_time = None
-                #         client.temp_file = NamedTemporaryFile().name
+                if client.phrase_time and now - client.phrase_time > timedelta(seconds=settings["RECORD_TIMEOUT"]):
+                    logging.info("Clear audio buffer")
+                    client.clear_buffer()
 
         # if KeyboardInterrupt stop. If everything else stop and show error.
         except (KeyboardInterrupt, Exception) as e:
