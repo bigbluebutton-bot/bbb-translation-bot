@@ -10,11 +10,11 @@ import (
 	"strings"
 	"time"
 
-	api "github.com/ITLab-CC/bigbluebutton-bot/api"
+	api "github.com/bigbluebutton-bot/bigbluebutton-bot/api"
 
-	bot "github.com/ITLab-CC/bigbluebutton-bot"
+	bot "github.com/bigbluebutton-bot/bigbluebutton-bot"
 
-	bbb "github.com/ITLab-CC/bigbluebutton-bot/bbb"
+	bbb "github.com/bigbluebutton-bot/bigbluebutton-bot/bbb"
 
 	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v3"
@@ -330,8 +330,8 @@ type configChangeSet struct {
 
 type configTranscriptionServer struct {
 	ExternalHost    string `json:"externalhost"`
-	PortTCP string `json:"port_tcp"`
-	Secret  string `json:"secret"`
+	PortTCP         string `json:"port_tcp"`
+	Secret          string `json:"secret"`
 	HealthCheckPort string `json:"healthcheckport"`
 }
 
@@ -368,8 +368,8 @@ func readConfig(file string) config {
 		},
 		TranscriptionServer: configTranscriptionServer{
 			ExternalHost:    os.Getenv("TRANSCRIPTION_SERVER_EXTERNAL_HOST"),
-			PortTCP: os.Getenv("TRANSCRIPTION_SERVER_PORT_TCP"),
-			Secret:  os.Getenv("TRANSCRIPTION_SERVER_SECRET"),
+			PortTCP:         os.Getenv("TRANSCRIPTION_SERVER_PORT_TCP"),
+			Secret:          os.Getenv("TRANSCRIPTION_SERVER_SECRET"),
 			HealthCheckPort: os.Getenv("TRANSCRIPTION_SERVER_HEALTHCHECK_PORT"),
 		},
 		TranslationServer: configTranslationServer{

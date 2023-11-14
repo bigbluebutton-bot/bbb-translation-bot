@@ -52,7 +52,7 @@ docker run -it --rm --gpus all ubuntu nvidia-smi # Test GPU support
 ### Installation
 1. Clone the repository:
     ```bash
-    git clone https://github.com/ITLab-CC/bbb-translation-bot
+    git clone https://github.com/bigbluebutton-bot/bbb-translation-bot
     cd bbb-translation-bot
     ```
 
