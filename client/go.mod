@@ -10,7 +10,7 @@ require (
 )
 
 require (
-	github.com/JulianKropp/golang-socketio v0.0.0-20230816150715-bbc29a93ec5d // indirect
+	github.com/bigbluebutton-bot/golang-socketio v0.0.0-20230816150715-bbc29a93ec5d // indirect
 	github.com/Microsoft/go-winio v0.6.1 // indirect
 	github.com/apex/log v1.9.0 // indirect
 	github.com/benpate/convert v0.13.5 // indirect

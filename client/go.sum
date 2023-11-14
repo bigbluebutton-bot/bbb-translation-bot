@@ -1,7 +1,7 @@
 github.com/ITLab-CC/bigbluebutton-bot v0.1.0 h1:tHKj9OV1S7S6b5bYnl3TTJgsDC8accS0P+KRdQM+0EA=
 github.com/ITLab-CC/bigbluebutton-bot v0.1.0/go.mod h1:DVTwBrR/wFbBJw36jplgbAPtrtsF3ttYFfvxw6aq1/s=
-github.com/JulianKropp/golang-socketio v0.0.0-20230816150715-bbc29a93ec5d h1:YednRCWWnBYIechF05rniPb09n3Y7dm1Kgf7Aad9i+0=
-github.com/JulianKropp/golang-socketio v0.0.0-20230816150715-bbc29a93ec5d/go.mod h1:gYG7s8zBJyL7yIpe6w7JY1pY9egOGsr8v2afXLrtIEY=
+github.com/bigbluebutton-bot/golang-socketio v0.0.0-20230816150715-bbc29a93ec5d h1:YednRCWWnBYIechF05rniPb09n3Y7dm1Kgf7Aad9i+0=
+github.com/bigbluebutton-bot/golang-socketio v0.0.0-20230816150715-bbc29a93ec5d/go.mod h1:gYG7s8zBJyL7yIpe6w7JY1pY9egOGsr8v2afXLrtIEY=
 github.com/Microsoft/go-winio v0.5.2/go.mod h1:WpS1mjBmmwHBEWmogvA2mj8546UReBk4v8QkMxJ6pZY=
 github.com/Microsoft/go-winio v0.6.1 h1:9/kr64B9VUZrLm5YYwbGtUJnMgqWVOdUAXu6Migciow=
 github.com/Microsoft/go-winio v0.6.1/go.mod h1:LRdKpFKfdobln8UmuiYcKPot9D2v6svN5+sAH+4kjUM=

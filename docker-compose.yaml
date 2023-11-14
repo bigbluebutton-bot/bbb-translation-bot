@@ -17,7 +17,7 @@ services:
   changeset-server:
     container_name: changeset-server
     build:
-      context: https://github.com/JulianKropp/Changeset-grpc.git
+      context: https://github.com/bigbluebutton-bot/changeset-grpc.git
       dockerfile: Dockerfile
     networks:
       - bbb-bot
