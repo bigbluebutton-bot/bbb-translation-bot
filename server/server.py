@@ -154,6 +154,7 @@ class Client:
         if self.oggs_opus_header_frames_complete:
             with self.mutex:
                 self.phrase_time = None
+                os.remove(self.temp_file)
                 self.temp_file = NamedTemporaryFile().name
 
                 self.last_sample = self.oggs_opus_header_frames
@@ -190,7 +191,7 @@ def main():
     if settings["MODEL"] != "large" and settings["ONLY_ENGLISH"]:
         model = model + ".en"
     logging.info(f"Loading model '{model}'...")
-    audio_model = whisper.load_model(model)
+    audio_model = whisper.load_model(model, download_root="/app/models")
     logging.info("Model loaded")
 
 
@@ -276,7 +277,6 @@ def main():
                 client = None
                 with client_queue_mutex:
                     client = client_queue.get()
-                    logging.info(f"SSSSSSSSSSSSSSSSS")
 
                 last_sample = None
                 temp_file = None
