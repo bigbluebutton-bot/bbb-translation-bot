@@ -1,12 +1,14 @@
 #! python3.7
 import io
-import json
 import os
+import ipaddress
+import sys
 import threading
 import speech_recognition as sr
 import whisper
 import torch
 import logging
+from dotenv import load_dotenv
 from pydub import AudioSegment
 from datetime import datetime, timedelta
 from queue import Queue
@@ -20,37 +22,94 @@ from extract_ogg import get_header_frames as extract_ogg_header_frames
 
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
-CONFIG_PATH = 'config.json'  # Path to the JSON config file
 
 
 
 
+def load_settings():
+    # Load environment variables from .env file, if available
+    load_dotenv()
 
-# First use the environment variables. If there are no env values use the config.json file. If there is no config file use the default values.
-def load_settings(config_path):
-    # Try to read the config file
-    try:
-        with open(config_path, 'r') as config_file:
-            config = json.load(config_file)
-            transcription_config = config.get('transcription_server', {})
-    except FileNotFoundError:
-        transcription_config = {}
+    # if the config is valid
+    valid_config = True
 
-    # Function to get the environment variable or config variable or the default value if not set
-    def get_variable(env_var, config_var, default):
-        return os.getenv(env_var, config_var or default)
+    def validate_model(value, default, env_var):
+        nonlocal valid_config
+        valid_models = ['tiny', 'base', 'small', 'medium', 'large']
+        if value not in valid_models:
+            logging.error(f"Invalid MODEL setting: {env_var}. Must be one of {valid_models}.")
+            valid_config = False
+            return default
+        return value
 
-    return {
-        'MODEL': get_variable('TRANSCRIPTION_SERVER_MODEL', transcription_config.get('model'), "medium"),                                  # tiny, base, small, medium, large (Whisper model to use)
-        'ONLY_ENGLISH': get_variable('TRANSCRIPTION_SERVER_ONLY_ENGLISH', transcription_config.get('only_english'), "false") == "true",    # true, false (Only use the english model)
-        'RECORD_TIMEOUT': float(get_variable('TRANSCRIPTION_SERVER_RECORD_TIMEOUT', transcription_config.get('record_timeout'), "2")),     # float (How real time the recording is in seconds)
-        'TASK': get_variable('TRANSCRIPTION_SERVER_TASK', transcription_config.get('task'), "transcribe"),                                 # transcribe, translate (transcribe or translate it to english)
-        'HOST': get_variable('TRANSCRIPTION_SERVER_HOST', transcription_config.get('host'), "0.0.0.0"),                                    # string (Host to run the server on)
-        'EXTERNALHOST': get_variable('TRANSCRIPTION_SERVER_EXTERNAL_HOST', transcription_config.get('external_host'), "127.0.0.1"),        # string (Host to run the server on. This will be send to the client. The client will then connect to this host over UDP.)
-        'TCPPORT': int(get_variable('TRANSCRIPTION_SERVER_PORT_TCP', transcription_config.get('port_tcp'), "5000")),                       # int (Port to run the TCP server on)
-        'UDPPORT': int(get_variable('TRANSCRIPTION_SERVER_PORT_UDP', transcription_config.get('port_udp'), "5001")),                       # int (Port to run the UDP server on)
-        'SECRET_TOKEN': get_variable('TRANSCRIPTION_SERVER_SECRET', transcription_config.get('secret'), "your_secret_token")               # string (Secret token to authenticate clients)
+    def validate_path(value, default, env_var):
+        nonlocal valid_config
+        if not os.path.exists(value):
+            logging.error(f"Invalid path for setting: {env_var}. Path does not exist. Using default value: {default}")
+            valid_config = False
+            return default
+        return value
+
+    def validate_float(value, default, env_var):
+        nonlocal valid_config
+        try:
+            return float(value)
+        except ValueError:
+            logging.error(f"Invalid float value for setting: {env_var}. Using default value: {default}")
+            valid_config = False
+            return default
+
+    def validate_task(value, default, env_var):
+        nonlocal valid_config
+        valid_tasks = ['transcribe', 'translate']
+        if value not in valid_tasks:
+            logging.error(f"Invalid TASK setting: {env_var}. Must be one of {valid_tasks}.")
+            valid_config = False
+            return default
+        return value
+
+    def validate_int(value, default, env_var):
+        nonlocal valid_config
+        try:
+            return int(value)
+        except ValueError:
+            logging.error(f"Invalid integer value for setting: {env_var}. Using default value: {default}")
+            valid_config = False
+            return default
+
+    def validate_bool(value, default, env_var):
+        nonlocal valid_config
+        if value.lower() in ["true", "false"]:
+            return value.lower() == "true"
+        else:
+            logging.error(f"Invalid boolean value for setting: {env_var}. Expected 'true' or 'false'. Using default value: {default}")
+            valid_config = False
+            return default
+
+    def get_variable(env_var, default, validate_func=None):
+        value = os.getenv(env_var, default)
+        if validate_func:
+            value = validate_func(value, default, env_var)
+        return value
+
+    settings = {
+        'MODEL': get_variable('TRANSCRIPTION_SERVER_MODEL', "medium", validate_model),
+        'MODEL_PATH': get_variable('TRANSCRIPTION_SERVER_MODEL_PATH', "/app/models", validate_path),
+        'ONLY_ENGLISH': get_variable('TRANSCRIPTION_SERVER_ONLY_ENGLISH', "false", validate_bool),
+        'RECORD_TIMEOUT': get_variable('TRANSCRIPTION_SERVER_RECORD_TIMEOUT', 10.0, validate_float),
+        'TASK': get_variable('TRANSCRIPTION_SERVER_TASK', "transcribe", validate_task),
+        'HOST': get_variable('TRANSCRIPTION_SERVER_HOST', "0.0.0.0"),
+        'EXTERNALHOST': get_variable('TRANSCRIPTION_SERVER_EXTERNAL_HOST', "127.0.0.1"),
+        'TCPPORT': get_variable('TRANSCRIPTION_SERVER_PORT_TCP', 5000, validate_int),
+        'UDPPORT': get_variable('TRANSCRIPTION_SERVER_PORT_UDP', 5001, validate_int),
+        'SECRET_TOKEN': get_variable('TRANSCRIPTION_SERVER_SECRET', "your_secret_token")
     }
+
+    if not valid_config:
+        logging.error("Invalid config. Please fix the errors and try again.")
+        sys.exit(1)
+
+    return settings
 
 
 
@@ -104,6 +163,7 @@ class Client:
         if self.oggs_opus_header_frames_complete:
             with self.mutex:
                 self.phrase_time = None
+                os.remove(self.temp_file)
                 self.temp_file = NamedTemporaryFile().name
 
                 self.last_sample = self.oggs_opus_header_frames
@@ -124,7 +184,7 @@ def main():
 
 
     # Load settings from env variables or config file or use default values if not set
-    settings = load_settings(CONFIG_PATH)
+    settings = load_settings()
     # Print the settings for demonstration purposes
     for key, value in settings.items():
         logging.debug(f"{key}: {value}")
@@ -140,7 +200,7 @@ def main():
     if settings["MODEL"] != "large" and settings["ONLY_ENGLISH"]:
         model = model + ".en"
     logging.info(f"Loading model '{model}'...")
-    audio_model = whisper.load_model(model)
+    audio_model = whisper.load_model(model, download_root=settings["MODEL_PATH"])
     logging.info("Model loaded")
 
 
@@ -183,16 +243,20 @@ def main():
 
         # Handle messages
         def onmsg(c, data):
+            logging.debug(f"UDP from: {c.tcp_address()}")
             with client_dict_mutex:
                 if not c in client_dict:
+                    logging.error(f"Client {c.tcp_address()} not in list!")
                     return
                 client = client_dict[c]
                 with client.mutex:
+                    logging.debug(f"Add data to data queue for client {c.tcp_address()}")
                     client.data_queue.put(data)
                 
                 # Add client to client_queue if not already in it
                 with client_queue_mutex:
                     if not client in client_queue.queue:
+                        logging.debug(f"Add client to client queue for client {c.tcp_address()}")
                         client_queue.put(client)
         c.on_udp_message(onmsg)
     srv.on_connected(OnConnected)
@@ -262,7 +326,7 @@ def main():
                 # Convert audio to text using the model (if translation is enabled translate to english)
                 result = audio_model.transcribe(temp_file, fp16=torch.cuda.is_available(), task = settings["TASK"])
                 text = result['text'].strip()
-                logging.info(str.encode(text))
+                # logging.info(str.encode(text))
 
                 # Set transcription
                 with client.mutex:
@@ -278,7 +342,7 @@ def main():
                 # If enough time has passed between recordings, consider the phrase complete.
                 # Clear the current working audio buffer to start over with the new data.
                 if client.phrase_time and now - client.phrase_time > timedelta(seconds=settings["RECORD_TIMEOUT"]):
-                    logging.info("Clear audio buffer")
+                    # logging.info("Clear audio buffer")
                     client.clear_buffer()
 
         # if KeyboardInterrupt stop. If everything else stop and show error.
