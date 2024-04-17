@@ -42,6 +42,14 @@ def load_settings():
             return default
         return value
 
+    def validate_path(value, default, env_var):
+        nonlocal valid_config
+        if not os.path.exists(value):
+            logging.error(f"Invalid path for setting: {env_var}. Path does not exist. Using default value: {default}")
+            valid_config = False
+            return default
+        return value
+
     def validate_float(value, default, env_var):
         nonlocal valid_config
         try:
@@ -86,6 +94,7 @@ def load_settings():
 
     settings = {
         'MODEL': get_variable('TRANSCRIPTION_SERVER_MODEL', "medium", validate_model),
+        'MODEL_PATH': get_variable('TRANSCRIPTION_SERVER_MODEL_PATH', "/app/models", validate_path),
         'ONLY_ENGLISH': get_variable('TRANSCRIPTION_SERVER_ONLY_ENGLISH', "false", validate_bool),
         'RECORD_TIMEOUT': get_variable('TRANSCRIPTION_SERVER_RECORD_TIMEOUT', 10.0, validate_float),
         'TASK': get_variable('TRANSCRIPTION_SERVER_TASK', "transcribe", validate_task),
@@ -191,7 +200,7 @@ def main():
     if settings["MODEL"] != "large" and settings["ONLY_ENGLISH"]:
         model = model + ".en"
     logging.info(f"Loading model '{model}'...")
-    audio_model = whisper.load_model(model, download_root="/app/models")
+    audio_model = whisper.load_model(model, download_root=settings["MODEL_PATH"])
     logging.info("Model loaded")
 
 
