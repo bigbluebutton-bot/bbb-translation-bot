@@ -1,9 +1,7 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"strconv"
@@ -11,6 +9,7 @@ import (
 	"time"
 
 	api "github.com/bigbluebutton-bot/bigbluebutton-bot/api"
+	"github.com/joho/godotenv"
 
 	bot "github.com/bigbluebutton-bot/bigbluebutton-bot"
 
@@ -23,7 +22,7 @@ import (
 
 func main() {
 
-	conf := readConfig("config.json")
+	conf := loadConfig()
 
 	// Wait for the transcription server to start by making a http request to http://{conf.TranscriptionServer.Host}:8001/health
 	// Retry 10 times with 10 second delay
@@ -95,15 +94,9 @@ func main() {
 		panic(err)
 	}
 
-	chsetExternal, err := strconv.ParseBool(conf.ChangeSet.External)
-	if err != nil {
-		panic(err)
-	}
+	chsetExternal := conf.ChangeSet.External
 	chsetHost := conf.ChangeSet.Host
-	chsetPort, err := strconv.Atoi(conf.ChangeSet.Port)
-	if err != nil {
-		panic(err)
-	}
+	chsetPort := conf.ChangeSet.Port
 
 	enCapture, err := client.CreateCapture("en", chsetExternal, chsetHost, chsetPort)
 	if err != nil {
@@ -111,10 +104,7 @@ func main() {
 	}
 
 	transcriptionHost := conf.TranscriptionServer.ExternalHost
-	transcriptionPort, err := strconv.Atoi(conf.TranscriptionServer.PortTCP)
-	if err != nil {
-		panic(err)
-	}
+	transcriptionPort := conf.TranscriptionServer.PortTCP
 	transcriptionSecret := conf.TranscriptionServer.Secret
 
 	sc := NewStreamClient(transcriptionHost, transcriptionPort, true, transcriptionSecret)
@@ -224,9 +214,9 @@ func main() {
 
 // Wait for the transcription server to start by making a http request to http://{conf.TranscriptionServer.Host}:{conf.TranscriptionServer.Port}/health
 // Retry 10 times with 10 second delay
-func waitForServer(conf config) {
+func waitForServer(conf *config) {
 	// Define the URL using the configuration values
-	url := fmt.Sprintf("http://%s:%s/health", conf.TranscriptionServer.ExternalHost, conf.TranscriptionServer.HealthCheckPort)
+	url := fmt.Sprintf("http://%s:%d/health", conf.TranscriptionServer.ExternalHost, conf.TranscriptionServer.HealthCheckPort)
 
 	// Try to connect to the server with retries
 	for {
@@ -250,160 +240,155 @@ func waitForServer(conf config) {
 	}
 }
 
-/*
-{
-   "bbb": {
-       "api": {
-           "url": "https://example.com/bigbluebutton/api/",
-           "secret": "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-           "sha": "SHA256"
-       },
-       "client": {
-           "url": "https://example.com/html5client/",
-           "ws": "wss://example.com/html5client/websocket"
-       },
-       "pad": {
-           "url": "https://example.com/pad/",
-           "ws": "wss://example.com/pad/"
-       },
-       "webrtc": {
-           "ws": "wss://example.com/bbb-webrtc-sfu"
-       }
-   },
-   "changeset": {
-       "external": "false",
-       "host": "127.0.0.1",
-       "port": "5051"
-   },
-   "transcription_server": {
-       "host": "127.0.0.1",
-       "port_tcp": "5000",
-       "secret": "your_secret_token",
-	   "healthcheckport": "8001"
-   },
-   "translation_server": {
-       "url": "translation-server",
-       "secret": "your_secret_token"
-   }
-}
-*/
-
-type configAPI struct {
-	URL    string  `json:"url"`
-	Secret string  `json:"secret"`
-	SHA    api.SHA `json:"sha"`
-}
-
-type configClient struct {
-	URL string `json:"url"`
-	WS  string `json:"ws"`
-}
-
-type configPad struct {
-	URL string `json:"url"`
-	WS  string `json:"ws"`
-}
-
-type configWebRTC struct {
-	WS string `json:"ws"`
-}
-
-type configBBB struct {
-	API    configAPI    `json:"api"`
-	Client configClient `json:"client"`
-	Pad    configPad    `json:"pad"`
-	WebRTC configWebRTC `json:"webrtc"`
-}
+// This part is for loading the config from .env file or the environment vars
 
 type config struct {
-	BBB                 configBBB                 `json:"bbb"`
-	ChangeSet           configChangeSet           `json:"changeset"`
-	TranscriptionServer configTranscriptionServer `json:"transcription_server"`
-	TranslationServer   configTranslationServer   `json:"translation_server"`
-}
-
-type configChangeSet struct {
-	External string `json:"external"`
-	Host     string `json:"host"`
-	Port     string `json:"port"`
-}
-
-type configTranscriptionServer struct {
-	ExternalHost    string `json:"externalhost"`
-	PortTCP         string `json:"port_tcp"`
-	Secret          string `json:"secret"`
-	HealthCheckPort string `json:"healthcheckport"`
-}
-
-type configTranslationServer struct {
-	Url    string `json:"url"`
-	Secret string `json:"secret"`
-}
-
-func readConfig(file string) config {
-	// Try to read from env
-	conf := config{
-		BBB: configBBB{
-			API: configAPI{
-				URL:    os.Getenv("BBB_API_URL"),
-				Secret: os.Getenv("BBB_API_SECRET"),
-				SHA:    api.SHA(os.Getenv("BBB_API_SHA")),
-			},
-			Client: configClient{
-				URL: os.Getenv("BBB_CLIENT_URL"),
-				WS:  os.Getenv("BBB_CLIENT_WS"),
-			},
-			Pad: configPad{
-				URL: os.Getenv("BBB_PAD_URL"),
-				WS:  os.Getenv("BBB_PAD_WS"),
-			},
-			WebRTC: configWebRTC{
-				WS: os.Getenv("BBB_WEBRTC_WS"),
-			},
-		},
-		ChangeSet: configChangeSet{
-			External: os.Getenv("CHANGESET_EXTERNAL"),
-			Host:     os.Getenv("CHANGESET_HOST"),
-			Port:     os.Getenv("CHANGESET_PORT"),
-		},
-		TranscriptionServer: configTranscriptionServer{
-			ExternalHost:    os.Getenv("TRANSCRIPTION_SERVER_EXTERNAL_HOST"),
-			PortTCP:         os.Getenv("TRANSCRIPTION_SERVER_PORT_TCP"),
-			Secret:          os.Getenv("TRANSCRIPTION_SERVER_SECRET"),
-			HealthCheckPort: os.Getenv("TRANSCRIPTION_SERVER_HEALTHCHECK_PORT"),
-		},
-		TranslationServer: configTranslationServer{
-			Url:    os.Getenv("TRANSLATION_SERVER_URL"),
-			Secret: os.Getenv("TRANSLATION_SERVER_SECRET"),
-		},
+	BBB struct {
+		API struct {
+			URL    string
+			Secret string
+			SHA    api.SHA
+		}
+		Client struct {
+			URL string
+			WS  string
+		}
+		Pad struct {
+			URL string
+			WS  string
+		}
+		WebRTC struct {
+			WS string
+		}
 	}
-
-	if conf.BBB.API.URL != "" && conf.BBB.API.Secret != "" && conf.BBB.API.SHA != "" &&
-		conf.BBB.Client.URL != "" && conf.BBB.Client.WS != "" &&
-		conf.BBB.Pad.URL != "" && conf.BBB.Pad.WS != "" &&
-		conf.BBB.WebRTC.WS != "" &&
-		conf.ChangeSet.Host != "" && conf.ChangeSet.Port != "" &&
-		conf.TranscriptionServer.ExternalHost != "" && conf.TranscriptionServer.PortTCP != "" && conf.TranscriptionServer.Secret != "" && conf.TranscriptionServer.HealthCheckPort != "" &&
-		conf.TranslationServer.Url != "" && conf.TranslationServer.Secret != "" {
-		fmt.Println("Using env variables for config")
-		return conf
+	ChangeSet struct {
+		External bool
+		Host     string
+		Port     int
 	}
+	TranscriptionServer struct {
+		ExternalHost    string
+		PortTCP         int
+		Secret          string
+		HealthCheckPort int
+	}
+	TranslationServer struct {
+		URL    string
+		Secret string
+	}
+}
 
-	// Open our jsonFile
-	jsonFile, err := os.Open(file)
-	// if we os.Open returns an error then handle it
+
+func validateURL(envVar string, value string) (string, error) {
+	if strings.HasPrefix(value, "http://") || strings.HasPrefix(value, "https://") {
+		return value, nil
+	}
+	return "", fmt.Errorf("%s must be a valid URL", envVar)
+}
+
+func validateWS(envVar string, value string) (string, error) {
+	if strings.HasPrefix(value, "ws://") || strings.HasPrefix(value, "wss://") {
+		return value, nil
+	}
+	return "", fmt.Errorf("%s must be a valid WebSocket URL", envVar)
+}
+
+func validateBoolean(envVar string, value string) (string, error) {
+	if value == "true" || value == "false" {
+		return value, nil
+	}
+	return "", fmt.Errorf("%s must be 'true' or 'false'", envVar)
+}
+
+func validateInteger(envVar string, value string) (string, error) {
+	_, err := strconv.Atoi(value)
 	if err != nil {
-		fmt.Println(err)
+		return "", fmt.Errorf("%s must be an integer", envVar)
 	}
-	// defer the closing of our jsonFile so that we can parse it later on
-	defer jsonFile.Close()
-	// read our opened jsonFile as a byte array.
-	byteValue, err := io.ReadAll(jsonFile)
+	return value, nil
+}
+
+func validateFloat(envVar string, value string) (string, error) {
+	_, err := strconv.ParseFloat(value, 64)
 	if err != nil {
-		panic(err)
+		return "", fmt.Errorf("%s must be a float", envVar)
 	}
-	// we unmarshal our byteArray which contains our jsonFile's content into conf
-	json.Unmarshal([]byte(byteValue), &conf)
+	return value, nil
+}
+
+func validateString(envVar string, value string) (string, error) {
+	if value != "" {
+		return value, nil
+	}
+	return "", fmt.Errorf("%s must be a non-empty string", envVar)
+}
+
+func loadConfig() *config {
+	godotenv.Load() // Load the .env file
+
+	conf := &config{}
+	var hasErrors bool
+
+	get_variable := func(env_var string, default_var string, validate_func func(envVar string, value string) (string, error)) string {
+		value, exists := os.LookupEnv(env_var)
+		if !exists {
+			return default_var
+		}
+		if validate_func != nil {
+			validatedValue, err := validate_func(env_var, value)
+			if err != nil {
+				hasErrors = true
+				fmt.Printf("Error in %s: %s\n", env_var, err)
+				return default_var
+			}
+			return validatedValue
+		}
+		return value
+	}
+
+	var err error
+
+	// Populate config struct using get_variable
+	conf.BBB.API.URL = get_variable("BBB_API_URL", "https://example.com/bigbluebutton/api/", validateURL)
+	conf.BBB.API.Secret = get_variable("BBB_API_SECRET", "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX", validateString)
+	conf.BBB.API.SHA = api.SHA(get_variable("BBB_API_SHA", "SHA256", validateString))
+
+	conf.BBB.Client.URL = get_variable("BBB_CLIENT_URL", "https://example.com/html5client/", validateURL)
+	conf.BBB.Client.WS = get_variable("BBB_CLIENT_WS", "wss://example.com/html5client/websocket", validateWS)
+
+	conf.BBB.Pad.URL = get_variable("BBB_PAD_URL", "https://example.com/pad/", validateURL)
+	conf.BBB.Pad.WS = get_variable("BBB_PAD_WS", "wss://example.com/pad/", validateWS)
+
+	conf.BBB.WebRTC.WS = get_variable("BBB_WEBRTC_WS", "wss://example.com/bbb-webrtc-sfu", validateWS)
+
+	conf.ChangeSet.External = get_variable("CHANGESET_EXTERNAL", "true", validateBoolean) == "true"
+	conf.ChangeSet.Host = get_variable("CHANGESET_HOST", "localhost", validateString)
+	conf.ChangeSet.Port, err = strconv.Atoi(get_variable("CHANGESET_PORT", "5051", validateInteger))
+	if err != nil {
+		fmt.Println("Error in CHANGESET_PORT:", err)
+		hasErrors = true
+	}
+
+	conf.TranscriptionServer.ExternalHost = get_variable("TRANSCRIPTION_SERVER_EXTERNAL_HOST", "localhost", validateString)
+	conf.TranscriptionServer.PortTCP, err = strconv.Atoi(get_variable("TRANSCRIPTION_SERVER_PORT_TCP", "5000", validateInteger))
+	if err != nil {
+		fmt.Println("Error in TRANSCRIPTION_SERVER_PORT_TCP:", err)
+		hasErrors = true
+	}
+	conf.TranscriptionServer.Secret = get_variable("TRANSCRIPTION_SERVER_SECRET", "your_secret_token", validateString)
+	conf.TranscriptionServer.HealthCheckPort, err = strconv.Atoi(get_variable("TRANSCRIPTION_SERVER_HEALTHCHECK_PORT", "8001", validateInteger))
+	if err != nil {
+		fmt.Println("Error in TRANSCRIPTION_SERVER_HEALTHCHECK_PORT:", err)
+		hasErrors = true
+	}
+
+	conf.TranslationServer.URL = get_variable("TRANSLATION_SERVER_URL", "localhost", validateString)
+	conf.TranslationServer.Secret = get_variable("TRANSLATION_SERVER_SECRET", "your_secret_token", validateString)
+
+	if hasErrors {
+		fmt.Println("Configuration errors found. Exiting program.")
+		os.Exit(1)
+	}
 
 	return conf
 }
