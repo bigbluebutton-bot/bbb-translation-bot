@@ -1,11 +1,13 @@
 import os
 from queue import Queue
 import threading
-from tempfile import NamedTemporaryFile
+import uuid
 
 # Client class for each connected Client to handle the data seperatly.
 class Client:
     def __init__(self, client):
+
+        self.id = str(uuid.uuid4())
 
         self.mutex = threading.Lock()
 
@@ -27,8 +29,6 @@ class Client:
 
         self.phrase_time = None
 
-        self.temp_file = NamedTemporaryFile().name + ".opus"
-
     def send(self, data):
         self._client.send_message(data)
 
@@ -36,8 +36,6 @@ class Client:
         if self.oggs_opus_header_frames_complete:
             with self.mutex:
                 self.phrase_time = None
-                os.remove(self.temp_file)
-                self.temp_file = NamedTemporaryFile().name
 
                 self.last_sample = self.oggs_opus_header_frames
 

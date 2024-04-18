@@ -79,7 +79,8 @@ def load_settings():
         'EXTERNALHOST': get_variable('TRANSCRIPTION_SERVER_EXTERNAL_HOST', "127.0.0.1"),
         'TCPPORT': get_variable('TRANSCRIPTION_SERVER_PORT_TCP', 5000, validate_int),
         'UDPPORT': get_variable('TRANSCRIPTION_SERVER_PORT_UDP', 5001, validate_int),
-        'SECRET_TOKEN': get_variable('TRANSCRIPTION_SERVER_SECRET', "your_secret_token")
+        'SECRET_TOKEN': get_variable('TRANSCRIPTION_SERVER_SECRET', "your_secret_token"),
+        'RAM_DISK_PATH': get_variable('TRANSCRIPTION_SERVER_RAM_DISK_PATH', "/mnt/ramdisk", validate_path),
     }
 
     if not valid_config:

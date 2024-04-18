@@ -103,6 +103,16 @@ Refer to the official [Nvidia documentation](https://docs.nvidia.com/datacenter/
     deactivate
     ```
 
+5. Automate the creation of a RAM disk on system startup:
+Add the following line to your `/etc/fstab` file to set up a tmpfs RAM disk automatically on system boot. This allows for faster data processing and reduces wear on physical drives.
+    ```bash
+    sudo nano /etc/fstab
+    # Add this line at the end of the file:
+    tmpfs /mnt/ramdisk tmpfs nodev,nosuid,noexec,nodiratime,size=512M 0 0
+    # Create the mount directory if it does not exist:
+    sudo mkdir -p /mnt/ramdisk
+    ```
+
 ## Client Setup
 1. Install Golang:
     Follow the official [Golang installation guide](https://go.dev/doc/install):

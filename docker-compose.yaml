@@ -31,6 +31,8 @@ services:
       dockerfile: Dockerfile
     volumes:
       - ./.models:/app/models
+    tmpfs:
+      - /mnt/ramdisk:size=1024m
     env_file:
       - .env
     networks:

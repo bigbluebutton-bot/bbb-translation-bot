@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from queue import Queue
 from time import sleep
 from flask import Flask
+import tempfile
 
 from Config import load_settings
 from StreamServer import Server
@@ -81,7 +82,6 @@ def main():
 
         # Create new client
         newclient = Client(c)
-        logging.info(f"TEMP: {newclient.temp_file}")
         with client_dict_mutex:
             client_dict[c] = newclient
 
@@ -150,7 +150,6 @@ def main():
                     client = client_queue.get()
 
                 last_sample = None
-                temp_file = None
 
                 # Pull raw recorded audio from the queue.
                 with client.mutex:
@@ -164,7 +163,6 @@ def main():
                             client.last_sample += data
 
                     last_sample = client.last_sample
-                    temp_file = client.temp_file
 
                     # set header
                     if client.oggs_opus_header_frames_complete == False:
@@ -180,15 +178,17 @@ def main():
                 # with open('/testing/sample.opus', 'wb') as f:
                 #     f.write(last_sample)
 
-                # Convert opus to wav
-                opus_data = io.BytesIO(last_sample)
-                opus_audio = AudioSegment.from_file(opus_data, format="ogg", frame_rate=48000, channels=2, sample_width=2)
-                opus_audio.export(temp_file, format="wav")
-
-                # Convert audio to text using the model (if translation is enabled translate to english)
-                result = audio_model.transcribe(temp_file, fp16=torch.cuda.is_available(), task = settings["TASK"])
-                text = result['text'].strip()
-                # logging.info(str.encode(text))
+                # Create temporary file for audio data which will be deleted after use.
+                with tempfile.NamedTemporaryFile(prefix='tmp_audio_', suffix='.wav', dir=settings['RAM_DISK_PATH'], delete=True) as temp_file:
+                    # Convert opus to wav
+                    opus_data = io.BytesIO(last_sample)
+                    opus_audio = AudioSegment.from_file(opus_data, format="ogg", frame_rate=48000, channels=2, sample_width=2)
+                    opus_audio.export(temp_file.name, format="wav")
+                    
+                    # Transcribe audio data
+                    result = audio_model.transcribe(temp_file.name, fp16=torch.cuda.is_available(), task=settings["TASK"])
+                    text = result['text'].strip()
+                    # logging.info(str.encode(text))
 
                 # Set transcription
                 with client.mutex:
