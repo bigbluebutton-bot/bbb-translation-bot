@@ -81,6 +81,8 @@ def load_settings():
         'UDPPORT': get_variable('TRANSCRIPTION_SERVER_PORT_UDP', 5001, validate_int),
         'SECRET_TOKEN': get_variable('TRANSCRIPTION_SERVER_SECRET', "your_secret_token"),
         'RAM_DISK_PATH': get_variable('TRANSCRIPTION_SERVER_RAM_DISK_PATH', "/mnt/ramdisk", validate_path),
+        'HEALTH_CHECK_PORT': get_variable('TRANSCRIPTION_SERVER_HEALTH_CHECK_PORT', 8001, validate_int),
+        'PROMETHEUS_PORT': get_variable('TRANSCRIPTION_SERVER_PROMETHEUS_PORT', 2112, validate_int),
     }
 
     if not valid_config:

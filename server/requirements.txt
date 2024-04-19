@@ -6,3 +6,4 @@ pydub
 flask
 cryptography
 python-dotenv
+prometheus_client

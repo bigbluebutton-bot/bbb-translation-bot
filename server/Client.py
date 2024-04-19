@@ -29,6 +29,10 @@ class Client:
 
         self.phrase_time = None
 
+        self.client_queue_wait_time = 0.0   # The time when the client was added to the client queue.
+
+        self.time_data_received = 0.0    # The time when unprocessed data was first received from the client.
+
     def send(self, data):
         self._client.send_message(data)
 
