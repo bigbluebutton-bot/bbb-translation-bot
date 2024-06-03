@@ -57,6 +57,7 @@ client_queue_mutex = threading.Lock() # Mutex to lock the client_queue
 # Load settings from env variables use default values if not set
 settings = load_settings()
 
+loading_model_mutex = threading.Lock()
 class worker:
     def __init__(self, model_type = "tiny", english_only = "false", model_path = ""):
         if english_only:
@@ -74,9 +75,10 @@ class worker:
         # Load model
         with self.running_mutex:
             if self.model_path != "":
-                logging.info(f"Loading model '{self.model_type}'...")
-                self.model = whisper.load_model(self.model_type, download_root=self.model_path)
-                logging.info("Model loaded")
+                with loading_model_mutex:
+                    logging.info(f"Loading model '{self.model_type}'...")
+                    self.model = whisper.load_model(self.model_type, download_root=self.model_path)
+                    logging.info("Model loaded")
             else:
                 self.model = whisper.load_model(self.model_type)
 
