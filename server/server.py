@@ -44,6 +44,7 @@ def healthcheck():
 # Metrics definitions for prometheus
 # http://127.0.0.1:1000/graph?g0.expr=connected_clients&g0.tab=0&g0.display_mode=stacked&g0.show_exemplars=0&g0.range_input=15m&g1.expr=avg(rate(speech_processing_time_seconds_sum%5B1m%5D)%20%2F%20rate(speech_processing_time_seconds_count%5B1m%5D))&g1.tab=0&g1.display_mode=stacked&g1.show_exemplars=0&g1.range_input=15m&g2.expr=avg(rate(client_queue_wait_time_seconds_sum%5B1m%5D)%20%2F%20rate(client_queue_wait_time_seconds_count%5B1m%5D))&g2.tab=0&g2.display_mode=stacked&g2.show_exemplars=0&g2.range_input=15m&g3.expr=avg(rate(total_processing_time_seconds_sum%5B1m%5D)%20%2F%20rate(total_processing_time_seconds_count%5B1m%5D))&g3.tab=0&g3.display_mode=stacked&g3.show_exemplars=0&g3.range_input=15m
 connected_clients = Gauge('connected_clients', 'Number of currently connected clients')
+whisper_workers = Gauge('whisper_workers', 'Number of whisper workers transcribing/translating speech')
 processing_time = Histogram('speech_processing_time_seconds', 'Time taken to process speech')
 queue_wait_time = Histogram('client_queue_wait_time_seconds', 'Time a client has waited in the queue')
 total_processing_time = Histogram('total_processing_time_seconds', 'Time from receiving audio to sending transcription')
@@ -84,6 +85,8 @@ class worker:
 
             # Start processing
             self.running = True
+
+            whisper_workers.inc()  # Increment whisper workers for prometheus
 
             time_to_sleep = 0.25
             while self.running:
@@ -171,6 +174,8 @@ class worker:
                     if client:
                         client.stop()
                         break
+        
+        whisper_workers.dec()  # Decrement whisper workers for prometheus
         self.stop()
 
     def stop(self):
