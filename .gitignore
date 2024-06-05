@@ -1,7 +1,10 @@
+client_test/*
+client_test
+.models
+.models/*
 *.temp
 config.json
 *.opus
-.models/*.pt
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

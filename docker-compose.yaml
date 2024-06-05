@@ -3,6 +3,7 @@ version: '3.9'
 services:
   bot:
     container_name: bot
+    restart: always
     build:
       context: ./client
       dockerfile: Dockerfile
@@ -16,21 +17,23 @@ services:
 
   changeset-server:
     container_name: changeset-server
+    restart: always
     build:
       context: https://github.com/bigbluebutton-bot/changeset-grpc.git
       dockerfile: Dockerfile
     networks:
       - bbb-bot
-    # ports:
-    #   - "5051:5051"
+    ports:
+      - "5051:5051"
 
   transcription-server:
     container_name: transcription-server
+    restart: always
     build:
       context: ./server
       dockerfile: Dockerfile
     volumes:
-      - ./.models:/app/models
+      - ./.models/whisper:/app/models
     tmpfs:
       - /mnt/ramdisk:size=1024m
     env_file:
@@ -62,8 +65,26 @@ services:
     networks:
       - bbb-bot
 
-
-
+  libretranslate:
+    container_name: libretranslate
+    image: libretranslate/libretranslate:latest-cuda
+    restart: unless-stopped
+    ports:
+      - "8000:5000"
+    tty: true
+    healthcheck:
+      test: ['CMD-SHELL', './venv/bin/python scripts/healthcheck.py']     
+    command: --ssl --ga-id MY-GA-ID --req-limit 100 --char-limit 500
+    volumes:
+      - ./.models/libretranslate:/root/.local:rw
+    deploy:
+      resources:
+        reservations:
+          devices:
+          - driver: nvidia
+            capabilities: [gpu]
+    networks:
+      - bbb-bot
 
 networks:
   bbb-bot:
