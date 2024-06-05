@@ -1,14 +1,19 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	api "github.com/bigbluebutton-bot/bigbluebutton-bot/api"
+	"github.com/bigbluebutton-bot/bigbluebutton-bot/pad"
 	"github.com/joho/godotenv"
 
 	bot "github.com/bigbluebutton-bot/bigbluebutton-bot"
@@ -19,6 +24,70 @@ import (
 	"github.com/pion/webrtc/v3"
 	"github.com/pion/webrtc/v4/pkg/media/oggwriter"
 )
+
+// TranslationRequest struct to hold the request payload
+type TranslationRequest struct {
+	Q      string `json:"q"`
+	Source string `json:"source"`
+	Target string `json:"target"`
+}
+
+// TranslationResponse struct to parse the response
+type TranslationResponse struct {
+	TranslatedText string `json:"translatedText"`
+}
+
+// translate function sends a request to the LibreTranslate API and returns the translated text
+func translate(apiURL, text, sourceLang, targetLang string) (string, error) {
+	// Create the request payload
+	requestPayload := TranslationRequest{
+		Q:      text,
+		Source: sourceLang,
+		Target: targetLang,
+	}
+
+	// Convert the payload to JSON
+	requestBody, err := json.Marshal(requestPayload)
+	if err != nil {
+		return "", fmt.Errorf("error marshalling request payload: %w", err)
+	}
+
+	// Create a new HTTP request
+	req, err := http.NewRequest("POST", apiURL, bytes.NewBuffer(requestBody))
+	if err != nil {
+		return "", fmt.Errorf("error creating HTTP request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	// Make the HTTP request
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("error making HTTP request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Read the response body
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("error reading response body: %w", err)
+	}
+
+	// Check if the translation was successful
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("failed to get a valid response. Status code: %d, Response: %s", resp.StatusCode, body)
+	}
+
+	// Parse the response
+	var translationResponse TranslationResponse
+	err = json.Unmarshal(body, &translationResponse)
+	if err != nil {
+		return "", fmt.Errorf("error unmarshalling response: %w", err)
+	}
+
+	// Return the translated text
+	return translationResponse.TranslatedText, nil
+}
 
 func main() {
 
@@ -40,20 +109,6 @@ func main() {
 	}
 	fmt.Printf("New meeting \"%s\" was created.\n", newmeeting.MeetingName)
 
-	fmt.Println("-----------------------------------------------")
-
-	fmt.Println("All meetings:")
-	meetings, err := bbbapi.GetMeetings()
-	if err != nil {
-		panic(err)
-	}
-	for _, meeting := range meetings {
-		fmt.Print(meeting.MeetingName + ": ")
-		fmt.Println(bbbapi.IsMeetingRunning(meeting.MeetingID))
-	}
-
-	fmt.Println("-----------------------------------------------")
-
 	url, err := bbbapi.JoinGetURL(newmeeting.MeetingID, "TestUser", true)
 	if err != nil {
 		panic(err)
@@ -63,6 +118,9 @@ func main() {
 	time.Sleep(1 * time.Second)
 
 	fmt.Println("-----------------------------------------------")
+
+	clientsPad := make(map[*bot.Client]*pad.Pad)
+	clientsPadMutex := &sync.Mutex{}
 
 	client, err := bot.NewClient(conf.BBB.Client.URL, conf.BBB.Client.WS, conf.BBB.Pad.URL, conf.BBB.Pad.WS, conf.BBB.API.URL, conf.BBB.API.Secret, conf.BBB.WebRTC.WS)
 	if err != nil {
@@ -79,26 +137,44 @@ func main() {
 		panic(err)
 	}
 
+	chsetExternal := conf.ChangeSet.External
+	chsetHost := conf.ChangeSet.Host
+	chsetPort := conf.ChangeSet.Port
+
 	err = client.OnGroupChatMsg(func(msg bbb.Message) {
 
 		fmt.Println("[" + msg.SenderName + "]: " + msg.Message)
 
 		if msg.Sender != client.InternalUserID {
-			if msg.Message == "ping" {
-				fmt.Println("Sending pong")
-				client.SendChatMsg("pong", msg.ChatId)
+			msg := msg.Message
+			// when the message start with "!translate"
+			if strings.HasPrefix(msg, "!translate") {
+				fmt.Println("Translate command received")
+				// get the message after "!translate"
+				languageName := strings.TrimSpace(msg[len("!translate "):])
+				name := client.LanguageShortToName(bot.Language(languageName))
+				fmt.Println("Language: " + name)
+				if name != "" {
+					// Create new client
+					newClient, err := bot.NewClient(conf.BBB.Client.URL, conf.BBB.Client.WS, conf.BBB.Pad.URL, conf.BBB.Pad.WS, conf.BBB.API.URL, conf.BBB.API.Secret, conf.BBB.WebRTC.WS)
+					if err := newClient.Join(newmeeting.MeetingID, "Bot-" + languageName, true); err != nil {
+						return
+					}
+
+					// Create new capture
+					capture, err := newClient.CreateCapture(bot.Language(languageName), chsetExternal, chsetHost, chsetPort)
+					if err != nil {
+						panic(err)
+					}
+
+					// Add to clientsPad
+					clientsPadMutex.Lock()
+					clientsPad[newClient] = capture
+					clientsPadMutex.Unlock()
+				}
 			}
 		}
 	})
-	if err != nil {
-		panic(err)
-	}
-
-	chsetExternal := conf.ChangeSet.External
-	chsetHost := conf.ChangeSet.Host
-	chsetPort := conf.ChangeSet.Port
-
-	enCapture, err := client.CreateCapture("en", chsetExternal, chsetHost, chsetPort)
 	if err != nil {
 		panic(err)
 	}
@@ -127,9 +203,20 @@ func main() {
 		fmt.Println("TCP message event:", text)
 		validtext := strings.ToValidUTF8(text, "")
 
-		err = enCapture.SetText(validtext)
-		if err != nil {
-			panic(err)
+		clientsPadMutex.Lock()
+		clientsPadTemp := clientsPad
+		clientsPadMutex.Unlock()
+		if clientsPadTemp != nil {
+			for _, pad := range clientsPadTemp {
+				translatedText, err := translate(conf.TranslationServer.URL, validtext, "en", "de")
+				if err != nil {
+					fmt.Println("Error in translation:", err)
+				}
+				err = pad.SetText(translatedText)
+				if err != nil {
+					fmt.Println("Error in pad write:", err)
+				}
+			}
 		}
 	})
 
@@ -230,11 +317,29 @@ func waitForServer(conf *config) {
 
 			// If the status code is 200, the server is up
 			if resp.StatusCode == http.StatusOK {
-				fmt.Println("Transcription server is up and running.")
-				return
+				fmt.Println("Transcription-server is up and running.")
+				break
 			}
 
-			fmt.Println("Server is not ready yet...")
+			fmt.Println("Transcription-server is not ready yet...")
+			time.Sleep(10 * time.Second)
+		}
+	}
+
+	// Wait for translation server to start
+	for {
+		resp, err := translate(conf.TranslationServer.URL, "test", "en", "de")
+		if err != nil {
+			fmt.Println("Waiting for translation server to start...")
+			time.Sleep(10 * time.Second)
+		} else {
+			// If the status code is 200, the server is up
+			if resp != "" {
+				fmt.Println("Translation-server is up and running.")
+				break
+			}
+
+			fmt.Println("Translation-server is not ready yet...")
 			time.Sleep(10 * time.Second)
 		}
 	}

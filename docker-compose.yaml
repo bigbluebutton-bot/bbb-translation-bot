@@ -1,5 +1,3 @@
-version: '3.9'
-
 services:
   bot:
     container_name: bot
@@ -65,8 +63,8 @@ services:
     networks:
       - bbb-bot
 
-  libretranslate:
-    container_name: libretranslate
+  translation-server:
+    container_name: translation-server
     image: libretranslate/libretranslate:latest-cuda
     restart: unless-stopped
     ports:

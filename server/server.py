@@ -273,7 +273,7 @@ def main():
 
     # create worker threaded
     workers = []
-    for _ in range(2):
+    for _ in range(1):
         w = worker(model_type=settings["MODEL"], english_only=settings["ONLY_ENGLISH"], model_path=settings["MODEL_PATH"])
         t = threading.Thread(target=w.process)
         t.daemon = True
