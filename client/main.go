@@ -13,7 +13,7 @@ import (
 	"time"
 
 	api "github.com/bigbluebutton-bot/bigbluebutton-bot/api"
-	"github.com/bigbluebutton-bot/bigbluebutton-bot/pad"
+
 	"github.com/joho/godotenv"
 
 	bot "github.com/bigbluebutton-bot/bigbluebutton-bot"
@@ -24,70 +24,6 @@ import (
 	"github.com/pion/webrtc/v3"
 	"github.com/pion/webrtc/v4/pkg/media/oggwriter"
 )
-
-// TranslationRequest struct to hold the request payload
-type TranslationRequest struct {
-	Q      string `json:"q"`
-	Source string `json:"source"`
-	Target string `json:"target"`
-}
-
-// TranslationResponse struct to parse the response
-type TranslationResponse struct {
-	TranslatedText string `json:"translatedText"`
-}
-
-// translate function sends a request to the LibreTranslate API and returns the translated text
-func translate(apiURL, text, sourceLang, targetLang string) (string, error) {
-	// Create the request payload
-	requestPayload := TranslationRequest{
-		Q:      text,
-		Source: sourceLang,
-		Target: targetLang,
-	}
-
-	// Convert the payload to JSON
-	requestBody, err := json.Marshal(requestPayload)
-	if err != nil {
-		return "", fmt.Errorf("error marshalling request payload: %w", err)
-	}
-
-	// Create a new HTTP request
-	req, err := http.NewRequest("POST", apiURL, bytes.NewBuffer(requestBody))
-	if err != nil {
-		return "", fmt.Errorf("error creating HTTP request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	// Make the HTTP request
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("error making HTTP request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	// Read the response body
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("error reading response body: %w", err)
-	}
-
-	// Check if the translation was successful
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("failed to get a valid response. Status code: %d, Response: %s", resp.StatusCode, body)
-	}
-
-	// Parse the response
-	var translationResponse TranslationResponse
-	err = json.Unmarshal(body, &translationResponse)
-	if err != nil {
-		return "", fmt.Errorf("error unmarshalling response: %w", err)
-	}
-
-	// Return the translated text
-	return translationResponse.TranslatedText, nil
-}
 
 func main() {
 
@@ -119,8 +55,8 @@ func main() {
 
 	fmt.Println("-----------------------------------------------")
 
-	clientsPad := make(map[*bot.Client]*pad.Pad)
-	clientsPadMutex := &sync.Mutex{}
+	clients := make([]*bot.Client, 0)
+	clientsMutex := &sync.Mutex{}
 
 	client, err := bot.NewClient(conf.BBB.Client.URL, conf.BBB.Client.WS, conf.BBB.Pad.URL, conf.BBB.Pad.WS, conf.BBB.API.URL, conf.BBB.API.Secret, conf.BBB.WebRTC.WS)
 	if err != nil {
@@ -142,35 +78,54 @@ func main() {
 	chsetPort := conf.ChangeSet.Port
 
 	err = client.OnGroupChatMsg(func(msg bbb.Message) {
-
 		fmt.Println("[" + msg.SenderName + "]: " + msg.Message)
 
 		if msg.Sender != client.InternalUserID {
-			msg := msg.Message
-			// when the message start with "!translate"
-			if strings.HasPrefix(msg, "!translate") {
-				fmt.Println("Translate command received")
-				// get the message after "!translate"
-				languageName := strings.TrimSpace(msg[len("!translate "):])
-				name := client.LanguageShortToName(bot.Language(languageName))
-				fmt.Println("Language: " + name)
-				if name != "" {
-					// Create new client
-					newClient, err := bot.NewClient(conf.BBB.Client.URL, conf.BBB.Client.WS, conf.BBB.Pad.URL, conf.BBB.Pad.WS, conf.BBB.API.URL, conf.BBB.API.Secret, conf.BBB.WebRTC.WS)
-					if err := newClient.Join(newmeeting.MeetingID, "Bot-" + languageName, true); err != nil {
-						return
-					}
+			message := msg.Message
 
-					// Create new capture
-					capture, err := newClient.CreateCapture(bot.Language(languageName), chsetExternal, chsetHost, chsetPort)
-					if err != nil {
-						panic(err)
-					}
+			if message == "ping" {
+				client.SendChatMsg("pong", msg.ChatId)
+			}
 
-					// Add to clientsPad
-					clientsPadMutex.Lock()
-					clientsPad[newClient] = capture
-					clientsPadMutex.Unlock()
+			if strings.HasPrefix(message, "!help") {
+				helpText := "Available commands:\n" +
+					"!help - List of all commands\n" +
+					"!translate - Displays help for !translate and a list of all possible languages\n" +
+					"!translate [language] - Starts translating into the specified language\n" +
+					"!translate [language] stop - Stops translating into the specified language and the bot leaves the meeting"
+				client.SendChatMsg(helpText, msg.ChatId)
+			} else if strings.HasPrefix(message, "!translate") {
+				args := strings.Split(message, " ")
+				if len(args) < 2 {
+					translateHelp := "Usage: !translate [language]\nLanguages: " + strings.Join(getSupportedLanguages(), ", ")
+					client.SendChatMsg(translateHelp, msg.ChatId)
+				} else {
+					language := args[1]
+					if args[1] == "stop" {
+						language = args[0]
+						// Stop translation and remove bot from meeting
+						removeBot(client, newmeeting.MeetingID, "Bot-"+language)
+					} else {
+						name := client.LanguageShortToName(bot.Language(language))
+						if name != "" {
+							// Create new client
+							newClient, err := bot.NewClient(conf.BBB.Client.URL, conf.BBB.Client.WS, conf.BBB.Pad.URL, conf.BBB.Pad.WS, conf.BBB.API.URL, conf.BBB.API.Secret, conf.BBB.WebRTC.WS)
+							if err := newClient.Join(newmeeting.MeetingID, "Bot-"+language, true); err != nil {
+								return
+							}
+
+							// Create new capture
+							_, err = newClient.CreateCapture(bot.Language(language), chsetExternal, chsetHost, chsetPort)
+							if err != nil {
+								panic(err)
+							}
+
+							// Add to clientsPad
+							clientsMutex.Lock()
+							clients = append(clients, newClient)
+							clientsMutex.Unlock()
+						}
+					}
 				}
 			}
 		}
@@ -203,18 +158,24 @@ func main() {
 		fmt.Println("TCP message event:", text)
 		validtext := strings.ToValidUTF8(text, "")
 
-		clientsPadMutex.Lock()
-		clientsPadTemp := clientsPad
-		clientsPadMutex.Unlock()
-		if clientsPadTemp != nil {
-			for _, pad := range clientsPadTemp {
-				translatedText, err := translate(conf.TranslationServer.URL, validtext, "en", "de")
-				if err != nil {
-					fmt.Println("Error in translation:", err)
-				}
-				err = pad.SetText(translatedText)
-				if err != nil {
-					fmt.Println("Error in pad write:", err)
+		clientsMutex.Lock()
+		clientsTemp := clients
+		clientsMutex.Unlock()
+		if clientsTemp != nil {
+			for _, cl := range clientsTemp {
+				pads := cl.GetCaptures()
+				for _, pad := range pads {
+					translatedText := validtext
+					if  pad.ShortLanguageName != "en" {
+						translatedText, err = translate(conf.TranslationServer.URL, validtext, "en", pad.ShortLanguageName)
+						if err != nil {
+							fmt.Println("Error in translation:", err)
+						}
+					}
+					err = pad.SetText(translatedText)
+					if err != nil {
+						fmt.Println("Error in pad write:", err)
+					}
 				}
 			}
 		}
@@ -287,16 +248,167 @@ func main() {
 	for {
 		time.Sleep(1 * time.Second)
 	}
+}
 
-	// if err := audio.Close(); err != nil {
-	// 	panic(err)
-	// }
+// Map from BBB to Libretranslate language codes
+var bbbToLibretranslate = map[string]string{
+	"af":     "af",
+	"ar":     "ar",
+	"az":     "az",
+	"bg-BG":  "bg",
+	"bn":     "bn",
+	"ca":     "ca",
+	"cs-CZ":  "cs",
+	"da":     "da",
+	"de":     "de",
+	"dv":     "", // No equivalent in Libretranslate
+	"el-GR":  "el",
+	"en":     "en",
+	"eo":     "eo",
+	"es":     "es",
+	"es-419": "es", // General Spanish
+	"es-ES":  "es",
+	"es-MX":  "es",
+	"et":     "et",
+	"eu":     "", // No equivalent in Libretranslate
+	"fa-IR":  "fa",
+	"fi":     "fi",
+	"fr":     "fr",
+	"gl":     "", // No equivalent in Libretranslate
+	"he":     "he",
+	"hi-IN":  "hi",
+	"hr":     "", // No equivalent in Libretranslate
+	"hu-HU":  "hu",
+	"hy":     "", // No equivalent in Libretranslate
+	"id":     "id",
+	"it-IT":  "it",
+	"ja":     "ja",
+	"ka":     "", // No equivalent in Libretranslate
+	"km":     "", // No equivalent in Libretranslate
+	"kn":     "", // No equivalent in Libretranslate
+	"ko-KR":  "ko",
+	"lo-LA":  "", // No equivalent in Libretranslate
+	"lt-LT":  "lt",
+	"lv":     "lv",
+	"ml":     "", // No equivalent in Libretranslate
+	"mn-MN":  "", // No equivalent in Libretranslate
+	"nb-NO":  "nb",
+	"nl":     "nl",
+	"oc":     "", // No equivalent in Libretranslate
+	"pl-PL":  "pl",
+	"pt":     "pt",
+	"pt-BR":  "pt",
+	"ro-RO":  "ro",
+	"ru":     "ru",
+	"sk-SK":  "sk",
+	"sl":     "sl",
+	"sr":     "", // No equivalent in Libretranslate
+	"sv-SE":  "sv",
+	"ta":     "", // No equivalent in Libretranslate
+	"te":     "", // No equivalent in Libretranslate
+	"th":     "th",
+	"tr-TR":  "tr",
+	"uk-UA":  "uk",
+	"vi-VN":  "", // No equivalent in Libretranslate
+	"zh-CN":  "zh",
+	"zh-TW":  "zt",
+}
 
-	// fmt.Println("Bot leaves " + newmeeting.MeetingName)
-	// err = client.Leave()
-	// if err != nil {
-	// 	panic(err)
-	// }
+// Function to convert BBB language code to Libretranslate language code
+func ConvertBBBToLibretranslate(bbbCode string) string {
+	if code, exists := bbbToLibretranslate[bbbCode]; exists {
+		return code
+	}
+	return ""
+}
+
+// TranslationRequest struct to hold the request payload
+type TranslationRequest struct {
+	Q      string `json:"q"`
+	Source string `json:"source"`
+	Target string `json:"target"`
+}
+
+// TranslationResponse struct to parse the response
+type TranslationResponse struct {
+	TranslatedText string `json:"translatedText"`
+}
+
+// translate function sends a request to the LibreTranslate API and returns the translated text
+func translate(apiURL, text, sourceLang, targetLang string) (string, error) {
+
+	linreTargetLang := ConvertBBBToLibretranslate(targetLang)
+	if linreTargetLang == "" {
+		return "", fmt.Errorf("unsupported language: %s", targetLang)
+	}
+
+	// Create the request payload
+	requestPayload := TranslationRequest{
+		Q:      text,
+		Source: sourceLang,
+		Target: linreTargetLang,
+	}
+
+	// Convert the payload to JSON
+	requestBody, err := json.Marshal(requestPayload)
+	if err != nil {
+		return "", fmt.Errorf("error marshalling request payload: %w", err)
+	}
+
+	// Create a new HTTP request
+	req, err := http.NewRequest("POST", apiURL, bytes.NewBuffer(requestBody))
+	if err != nil {
+		return "", fmt.Errorf("error creating HTTP request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	// Make the HTTP request
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("error making HTTP request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Read the response body
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("error reading response body: %w", err)
+	}
+
+	// Check if the translation was successful
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("failed to get a valid response. Status code: %d, Response: %s", resp.StatusCode, body)
+	}
+
+	// Parse the response
+	var translationResponse TranslationResponse
+	err = json.Unmarshal(body, &translationResponse)
+	if err != nil {
+		return "", fmt.Errorf("error unmarshalling response: %w", err)
+	}
+
+	// Return the translated text
+	return translationResponse.TranslatedText, nil
+}
+
+// Function to get supported languages
+func getSupportedLanguages() []string {
+	languages := []string{}
+	for key := range bbbToLibretranslate {
+		if bbbToLibretranslate[key] != "" {
+			languages = append(languages, key)
+		}
+	}
+	return languages
+}
+
+// Function to remove bot from meeting
+func removeBot(client *bot.Client, meetingID, botName string) {
+	fmt.Printf("Bot %s leaves %s\n", botName, meetingID)
+	if err := client.Leave(); err != nil {
+		fmt.Printf("Error leaving meeting: %v\n", err)
+	}
 }
 
 // Wait for the transcription server to start by making a http request to http://{conf.TranscriptionServer.Host}:{conf.TranscriptionServer.Port}/health
@@ -382,7 +494,6 @@ type config struct {
 		Secret string
 	}
 }
-
 
 func validateURL(envVar string, value string) (string, error) {
 	if strings.HasPrefix(value, "http://") || strings.HasPrefix(value, "https://") {

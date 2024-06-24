@@ -72,7 +72,7 @@ services:
     tty: true
     healthcheck:
       test: ['CMD-SHELL', './venv/bin/python scripts/healthcheck.py']     
-    command: --ssl --ga-id MY-GA-ID --req-limit 100 --char-limit 500
+    command: --ssl --ga-id MY-GA-ID
     volumes:
       - ./.models/libretranslate:/root/.local:rw
     deploy:
