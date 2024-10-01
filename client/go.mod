@@ -2,10 +2,8 @@ module client/test
 
 go 1.20
 
-replace github.com/bigbluebutton-bot/bigbluebutton-bot => /home/user/bigbluebutton-bot
-
 require (
-	github.com/bigbluebutton-bot/bigbluebutton-bot v0.1.3
+	github.com/bigbluebutton-bot/bigbluebutton-bot v0.1.4
 	github.com/pion/rtp v1.8.3
 	github.com/pion/webrtc/v3 v3.2.22
 	github.com/pion/webrtc/v4 v4.0.0-beta.7
