@@ -2,23 +2,11 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python: Debug Server",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceFolder}/server/server.py",  // Adjust the entry point if needed
-            "console": "integratedTerminal",
-            "cwd": "${workspaceFolder}/server",
-            "env": {
-                "PYTHONPATH": "${workspaceFolder}/server"
-            },
-            "justMyCode": true
-        },
-        {
             "name": "Go: Debug Client",
             "type": "go",
             "request": "launch",
             "mode": "auto",
-            "program": "${workspaceFolder}/client",
+            "program": "${workspaceFolder}/bot",
             "env": {},
             "args": []
         }
