@@ -1,6 +1,7 @@
 services:
   bot:
     container_name: bot
+    hostname: bot
     restart: always
     build:
       context: .
@@ -15,6 +16,7 @@ services:
 
   changeset-service:
     container_name: changeset-service
+    hostname: changeset-service
     restart: always
     build:
       context: https://github.com/bigbluebutton-bot/changeset-grpc.git
@@ -26,6 +28,7 @@ services:
 
   transcription-service:
     container_name: transcription-service
+    hostname: transcription-service
     build:
       context: https://github.com/bigbluebutton-bot/transcription-service.git
       dockerfile: Dockerfile
@@ -38,18 +41,17 @@ services:
     volumes:
       - ./.models:/app/.models
       # - ./logs:/app/logs
-    ipc: host
-    tty: true
-    stdin_open: true
     deploy:
       resources:
         reservations:
           devices:
-          - driver: nvidia
-            capabilities: [gpu]
+            - driver: nvidia
+              count: -1
+              capabilities: ["gpu"]
 
   translation-service:
     container_name: translation-service
+    hostname: translation-service
     image: libretranslate/libretranslate:latest-cuda
     restart: unless-stopped
     # ports:
@@ -64,14 +66,16 @@ services:
       resources:
         reservations:
           devices:
-          - driver: nvidia
-            capabilities: [gpu]
+            - driver: nvidia
+              count: -1
+              capabilities: ["gpu"]
     networks:
       - bbb-translation-bot
 
   prometheus:
     image: prom/prometheus:latest
     container_name: prometheus
+    hostname: prometheus
     restart: always
     # ports:
     #   - 1000:9090
