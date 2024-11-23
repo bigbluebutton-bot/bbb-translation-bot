@@ -421,7 +421,7 @@ func waitForServer(conf *config) {
 	for {
 		resp, err := http.Get(url)
 		if err != nil {
-			fmt.Println("Waiting for transcription server to start...")
+			fmt.Printf("Waiting for transcription server (%s) to start...\n", url)
 			time.Sleep(10 * time.Second)
 		} else {
 			// Don't forget to close the response body when you're done with it
@@ -442,7 +442,7 @@ func waitForServer(conf *config) {
 	for {
 		resp, err := translate(conf.TranslationServer.URL, "test", "en", "de")
 		if err != nil {
-			fmt.Println("Waiting for translation server to start...")
+			fmt.Printf("Waiting for translation server (%s) to start...\n", conf.TranslationServer.URL)
 			time.Sleep(10 * time.Second)
 		} else {
 			// If the status code is 200, the server is up
