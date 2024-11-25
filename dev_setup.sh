@@ -1,0 +1,452 @@
+#!/bin/bash
+
+SCREEN_NAME="install_session"
+LOGIN_HINT_FILE="/etc/profile.d/install_hint.sh"
+
+# Capture parameters
+STARTED_BY_CRONJOB=false
+
+# get server architecture
+ARCHITECTURE=$(dpkg --print-architecture)
+
+if [ "$1" == "--cron" ]; then
+    STARTED_BY_CRONJOB=true
+fi
+
+# Main execution
+main() {
+    add_task "Update System Packages" update ""  # No skip function
+    add_task "Install NVIDIA Drivers" nvidia_install check_nvidia_driver  # Skip if drivers are installed
+    add_task "Install NVIDIA CUDA" cuda_install check_cuda_installed  # Skip if CUDA is installed
+    add_task "Install NVIDIA CUDA Toolkit" cuda_toolkit check_toolkit  # Skip if toolkit is installed
+    add_task "Reboot" configure_reboot check_reboot_configured  # Skip if reboot is needed
+    add_task "Install NVIDIA cuDNN 8.9.7" install_cudnn check_cudnn_installed  # Skip if cuDNN is installed
+    add_task "Install Docker" install_docker check_docker_installed  # Skip if Docker is installed
+    add_task "Install Docker with NVIDIA support" install_docker_nvidia check_docker_nvidia  # Skip if Docker with NVIDIA support is installed
+    add_task "Install golang" install_golang check_golang_installed  # Skip if golang is installed
+    add_task "Install python3" install_python3 check_python3_installed  # Skip if python3 is installed
+
+    # Process task-specific logic
+    process_tasks
+}
+
+REBOOT_NEEDED=false
+
+#------------------------------------------------------------
+# 1. Update System Packages
+update() {
+    apt update
+}
+#------------------------------------------------------------
+
+#------------------------------------------------------------
+# 2. Install NVIDIA Drivers
+check_nvidia_driver() {
+    if command -v nvidia-smi &> /dev/null; then
+        return 0  # Step is completed
+    else
+        return 1  # Step not completed
+    fi
+}
+
+nvidia_install() {
+    ubuntu-drivers autoinstall
+    REBOOT_NEEDED=true
+}
+#------------------------------------------------------------
+
+#------------------------------------------------------------
+# 3. Install CUDA 12
+check_cuda_installed() {
+    if command -v nvcc &> /dev/null; then
+        return 0  # Skip task
+    else
+        return 1  # Don't skip task
+    fi
+}
+
+cuda_install() {
+    wget -q https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.0-1_all.deb
+    dpkg -i cuda-keyring_1.0-1_all.deb
+    rm -f cuda-keyring_1.0-1_all.deb
+    apt-get update
+    apt-get -y install cuda
+    echo 'export PATH=/usr/local/cuda-12.0/bin:$PATH' >> ~/.bashrc
+    echo 'export LD_LIBRARY_PATH=/usr/local/cuda-12.0/lib64:$LD_LIBRARY_PATH' >> ~/.bashrc
+    source ~/.bashrc
+    REBOOT_NEEDED=true
+}
+#------------------------------------------------------------
+
+#------------------------------------------------------------
+# 4. Install NVIDIA CUDA Toolkit
+check_toolkit() {
+    if dpkg -l | grep -qw nvidia-cuda-toolkit; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+cuda_toolkit() {
+    apt install -y nvidia-cuda-toolkit nvtop
+    REBOOT_NEEDED=true
+}
+#------------------------------------------------------------
+
+#------------------------------------------------------------
+# 5. Configure Reboot
+check_reboot_configured() {
+    # if STARTED_BY_CRONJOB is true, then skip this task
+    if [ "$STARTED_BY_CRONJOB" = true ]; then
+        return 0
+    else
+    # if REBOOT_NEEDED is true
+        if [ "$REBOOT_NEEDED" = true ]; then
+            return 1
+        else
+            return 0
+        fi
+    fi
+}
+
+configure_reboot() {
+    if ! grep -Fq "$FULL_PATH_OF_THIS_SCRIPT" /etc/crontab; then
+        echo "@reboot root /usr/bin/screen -dmS $SCREEN_NAME /bin/bash $FULL_PATH_OF_THIS_SCRIPT --cron" >> /etc/crontab
+    fi
+
+    # Add a login hint
+    cat << EOF > "$LOGIN_HINT_FILE"
+#!/bin/bash
+
+clear
+
+# Calculate the maximum line length for dynamic border adjustment
+MAX_LENGTH=0
+LINES=(
+    "        🚀  INSTALLATION IN PROGRESS IN BACKGROUND  🚀        "
+    "   The installation tasks are running in a 'screen' session   "
+    "   named:                                                     "
+    "        🖥️  SCREEN SESSION NAME: '$SCREEN_NAME'               "
+    "   To monitor the installation progress, please run:          "
+    "        📜  sudo su                                           "
+    "        📜  screen -r $SCREEN_NAME                            "
+    "   Once completed, a final message will be displayed here.    "
+)
+
+# Loop to determine the maximum line length
+for LINE in "\${LINES[@]}"; do
+    LENGTH=\${#LINE}
+    if (( LENGTH > MAX_LENGTH )); then
+        MAX_LENGTH=\$LENGTH
+    fi
+done
+
+# Create the top border
+echo -n "╔"
+for (( i = 0; i < MAX_LENGTH + 4; i++ )); do
+    echo -n "═"
+done
+echo "╗"
+
+# Print the message within the box
+for LINE in "\${LINES[@]}"; do
+    LENGTH=\${#LINE}
+
+    # Initialize extra_spaces and remove_spaces
+    extra_spaces=0
+    remove_spaces=0
+
+    # Adjust extra_spaces and remove_spaces based on the content of the line
+    if [[ \$LINE == *"🖥️"* ]]; then
+        extra_spaces=1
+        remove_spaces=0
+    elif [[ \$LINE == *"📜"* ]]; then
+        extra_spaces=0
+        remove_spaces=1
+    elif [[ \$LINE == *"🚀"* ]]; then
+        extra_spaces=0
+        remove_spaces=2
+    else
+        extra_spaces=0
+        remove_spaces=0
+    fi
+
+    # Adjust the number of spaces
+    num_spaces=\$(( MAX_LENGTH - LENGTH - remove_spaces ))
+    if (( num_spaces < 0 )); then
+        num_spaces=0
+    fi
+
+    # Create a string with num_spaces spaces
+    spaces=""
+    for (( i=0; i<num_spaces; i++ )); do
+        spaces+=" "
+    done
+
+    # Create a string with extra_spaces spaces
+    extra_spaces_str=""
+    for (( i=0; i<extra_spaces; i++ )); do
+        extra_spaces_str+=" "
+    done
+
+    printf "║  %s%s%s  ║\\n" "\$LINE" "\$spaces" "\$extra_spaces_str"
+done
+
+# Create the bottom border
+echo -n "╚"
+for (( i = 0; i < MAX_LENGTH + 4; i++ )); do
+    echo -n "═"
+done
+echo "╝"
+
+EOF
+
+    chmod +x "$LOGIN_HINT_FILE"
+    reboot now
+}
+#------------------------------------------------------------
+
+#------------------------------------------------------------
+# 6. Install cuDNN 8.9.7
+check_cudnn_installed() {
+    if dpkg -l | grep -qw libcudnn8; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+install_cudnn() {
+    wget -q https://developer.download.nvidia.com/compute/cudnn/secure/8.9.7/local_installers/12.x/cudnn-local-repo-ubuntu2204-8.9.7.29_1.0-1_amd64.deb
+    dpkg -i cudnn-local-repo-ubuntu2204-8.9.7.29_1.0-1_amd64.deb
+    rm -f cudnn-local-repo-ubuntu2204-8.9.7.29_1.0-1_amd64.deb
+    apt-key add /var/cudnn-local-repo-*/7fa2af80.pub
+    apt-get update
+    apt-get install -y libcudnn8 libcudnn8-dev
+}
+#------------------------------------------------------------
+
+#------------------------------------------------------------
+# 7. Install Docker
+check_docker_installed() {
+    if command -v docker &> /dev/null; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+install_docker() {
+    curl -sSL https://get.docker.com | sh
+}
+#------------------------------------------------------------
+
+#------------------------------------------------------------
+# 8. Install docker with NVIDIA support
+check_docker_nvidia() {
+    if dpkg -l | grep -qw nvidia-container-runtime; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+install_docker_nvidia() {
+    curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | \
+        gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+    curl -s -L "https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list" | \
+        sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
+        tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+    apt-get update
+    apt-get install -y nvidia-container-runtime
+    systemctl restart docker
+}
+#------------------------------------------------------------
+
+#------------------------------------------------------------
+# 9. Install golang
+check_golang_installed() {
+    # Check if newer version of Go is available
+    go_version=$(curl -s https://go.dev/VERSION?m=text | head -n 1 | sed 's/^go//')
+    export PATH=$PATH:/usr/local/go/bin
+    if command -v go &> /dev/null && [[ "$(go version)" == *"go$go_version"* ]]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+install_golang() {
+    go_version=$(curl -s https://go.dev/VERSION?m=text | head -n 1 | sed 's/^go//')
+    # Download the Go binary
+    wget -q "https://golang.org/dl/go${go_version}.linux-${ARCHITECTURE}.tar.gz"
+    rm -rf /usr/local/go
+    tar -C /usr/local -xzf go${go_version}.linux-${ARCHITECTURE}.tar.gz
+    export PATH=$PATH:/usr/local/go/bin
+    if ! grep -q '/usr/local/go/bin' ~/.bashrc; then
+        echo 'export PATH=$PATH:/usr/local/go/bin' >> ~/.bashrc
+    fi
+}
+#------------------------------------------------------------
+
+#------------------------------------------------------------
+# 10. Install python3
+check_python3_installed() {
+    if command -v python3 &> /dev/null; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+install_python3() {
+    apt install -y python3
+}
+#------------------------------------------------------------
+
+
+
+
+
+
+
+
+
+
+# Function to check for root privileges
+check_root() {
+    if [ "$EUID" -ne 0 ]; then
+        echo "❌ This script must be run as root. Please use 'sudo' or run as root." > /dev/tty
+        exit 1
+    fi
+}
+
+# Check for root access
+check_root
+
+# Get the full path and directory of the script
+FULL_PATH_OF_THIS_SCRIPT=$(readlink -f "$0")
+SCRIPT_DIR=$(dirname "$FULL_PATH_OF_THIS_SCRIPT")
+
+# Set up the log file
+LOG_FILE="$SCRIPT_DIR/install.log"
+
+# Redirect stdout and stderr to the log file
+exec >>"$LOG_FILE" 2>&1
+
+# Function to initialize the screen
+initialize_screen() {
+    tput clear > /dev/tty
+    tput civis > /dev/tty  # Hide cursor
+    echo -e "🚀 Installation Progress:\n" > /dev/tty
+    echo -e "If you want to monitor the full logs, run: 'tail -f $LOG_FILE'\n" > /dev/tty
+    for ((i=0; i<${#STEPS[@]}; i++)); do
+        echo -e "${STATUS_ICONS["pending"]} ${STEPS[$i]}" > /dev/tty
+    done
+}
+
+# Task Management Functions
+
+# Define statuses with icons
+declare -A STATUS_ICONS=(
+    ["pending"]="⏳"
+    ["in_progress"]="🔄"
+    ["done"]="✅"
+    ["skipped"]="⏭️"
+    ["error"]="❌"
+)
+
+# Array to store tasks and their statuses
+declare -a TASKS
+declare -A TASK_STATUSES
+declare -A TASK_COMMANDS
+declare -A TASK_SKIP_CHECKS
+
+# Function to add a task
+# Usage: add_task "Task Name" "Command" "Skip Function" "Pre-Check Function"
+add_task() {
+    local task_name="$1"
+    local task_command="$2"
+    local skip_check="$3"
+    TASKS+=("$task_name")
+    TASK_STATUSES["$task_name"]="pending"
+    TASK_COMMANDS["$task_name"]="$task_command"
+    TASK_SKIP_CHECKS["$task_name"]="$skip_check"
+}
+
+# Function to execute a task
+run_task() {
+    local task_name="$1"
+
+    # Check if the task should be skipped
+    local skip_check="${TASK_SKIP_CHECKS[$task_name]}"
+    if [ -n "$skip_check" ] && $skip_check; then
+        TASK_STATUSES["$task_name"]="skipped"
+        update_task_status
+        return
+    fi
+
+    # Execute the task
+    TASK_STATUSES["$task_name"]="in_progress"
+    update_task_status
+    "${TASK_COMMANDS[$task_name]}"
+    if [ $? -ne 0 ]; then
+        TASK_STATUSES["$task_name"]="error"
+        update_task_status
+        exit_with_error
+    else
+        TASK_STATUSES["$task_name"]="done"
+    fi
+    update_task_status
+}
+
+# Function to initialize the task display
+initialize_task_screen() {
+    tput clear > /dev/tty
+    tput civis > /dev/tty  # Hide cursor
+    update_task_status
+}
+
+# Function to update task statuses on the screen
+update_task_status() {
+    tput cup 0 0 > /dev/tty
+    tput ed > /dev/tty
+    echo -e "🚀 Task Execution Progress:\n" > /dev/tty
+    echo -e "If you want to monitor the full logs, run: 'tail -f $LOG_FILE'\n" > /dev/tty
+    for task_n in "${TASKS[@]}"; do
+        local status="${TASK_STATUSES[$task_n]}"
+        echo -e "${STATUS_ICONS[$status]} $task_n" > /dev/tty
+    done
+}
+
+# Function to exit with error
+exit_with_error() {
+    echo -e "❌ Error occurred during task execution. Check the logs for more details." > /dev/tty
+    echo -e "\nUse 'tail $LOG_FILE' to view the log file." > /dev/tty
+    echo -e "\nScript will end in 10 seconds..." > /dev/tty
+    sleep 10
+    tput cnorm > /dev/tty  # Show cursor
+    exit 1
+}
+
+# Function to finalize the screen display
+finalize_task_screen() {
+    tput cnorm > /dev/tty  # Show cursor
+    echo -e "\n✅ All tasks processed!" > /dev/tty
+    echo -e "\nUse 'tail $LOG_FILE' to view the log file." > /dev/tty
+    echo -e "\nScript will end in 10 seconds..." > /dev/tty
+    sleep 10
+}
+
+# Main task handler
+process_tasks() {
+    initialize_task_screen
+    for t in "${TASKS[@]}"; do
+        run_task "$t"
+    done
+    finalize_task_screen
+}
+
+# Run the main function
+main
