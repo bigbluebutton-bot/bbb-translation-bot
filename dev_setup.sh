@@ -301,7 +301,14 @@ check_python3_installed() {
 }
 
 install_python3() {
-    apt install -y python3
+    # Install the latest available Python 3 version and pip
+    apt install -y python3 python3-pip
+
+    # Check the installed Python 3 version dynamically
+    PYTHON_VERSION=$(python3 --version | awk '{print $2}' | cut -d. -f1,2)
+
+    # Use the detected version to install the appropriate venv package
+    apt install -y python${PYTHON_VERSION}-venv
 }
 #------------------------------------------------------------
 
