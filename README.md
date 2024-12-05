@@ -4,141 +4,128 @@ BBB-Translation-Bot is a tool designed to enhance communication in BigBlueButton
 
 # Getting Started
 
-Follow these simple steps to quickly set up the BBB-Translation-Bot.
+First of all you need the right Haardware. Im using a [NVIDIA RTX4090](https://www.nvidia.com/de-de/geforce/graphics-cards/40-series/rtx-4090/). Where I get a stable transcription speed of 2,1 seconds in english with the large-v3 version of Whisper. And thats it. Now lets staart with the softwaare part. Dont worry. I will go through the whole process stepo by step. Also you dont have to install any drivers. I will show you how to do this. You just need a fresh installation of Ubuntu22 and root access. And dont be to ambitious and clone this project in advance. We will do this together. Just keep reading and dont skip any steps.
 
-## Prerequisites
+For both parth I recomend using [Ubuntu22](https://releases.ubuntu.com/jammy/). At the moment Im using Faster Whisper which needs cuDNN 8.x. And this is only supported on Ubuntu22. I also recomend using Proxmox to setup a virtual mashin with ubuntu22. Im showing you how to to this with GPU pathtrough on this README-proxmox.md
 
-### Hardware
-This setup was testet with a Nvidia RTX 2070 and RTX 3070 GPU. The GPU is used for the transcription and translation of the audio stream.
+You now have to options. You can get this up and running using docker, or setup an dev environment and run it with docker or normal in multiple screen seasions.
 
-### Install Nvidia drivers for Ubuntu:
-Refer to the official [Nvidia documentation](https://docs.nvidia.com/datacenter/tesla/tesla-installation-notes/index.html#ubuntu-lts):
-```bash
-sudo apt update
-sudo apt install linux-headers-$(uname -r)
-distribution=$(. /etc/os-release;echo $ID$VERSION_ID | sed -e 's/\.//g')
-wget https://developer.download.nvidia.com/compute/cuda/repos/$distribution/x86_64/cuda-keyring_1.0-1_all.deb
-sudo dpkg -i cuda-keyring_1.0-1_all.deb
-sudo apt update
-sudo apt -y install cuda-drivers
-sudo reboot now
-```
+There are two ways in getting started. If you just want to get this project up and running continue reading here.
+If you want to setup aa developer environment continue reaading here.
 
-### Docker with GPU support
-Ensure Docker with GPU support is installed on your system:
-Refer to the official [Nvidia documentation](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
+## Simple setup (no dev!!!)
+
+I have provided a makefile to make the setup process easier. You can run the following commands to get the project up and running.
 
 ```bash
-sudo apt update
-
-curl -sSL https://get.docker.com | sh
-
-curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg \
-  && curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
-    sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
-    sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list \
-  && \
-    sudo apt-get update
-
-sudo apt install nvidia-container-runtime
-
-which nvidia-container-runtime-hook
-
-sudo systemctl restart docker
-
-docker run -it --rm --gpus all ubuntu nvidia-smi # Test GPU support
+git clone https://github.com/bigbluebutton-bot/bbb-translation-bot
+cd bbb-translation-bot
+sudo make simple-setup
 ```
 
-### Installation
-1. Clone the repository:
+This will do the following:
+- Update System Packages
+- Install nvidia drivers
+- Reboot the system
+- Install docker
+- Install docker with nvidia support
+
+The script will reboot the system. Dont worry. It will automaticly continue after the reboot. To see the status of the script after the reboot you can run the following command:
+
+```bash
+sudo su
+screen -r 
+```
+
+If the setup script is completed you can run the following command to start the bot:
+
+```bash
+make start
+```
+
+Because this will be the first time starting the bot it will detect, there is no '.env' file. So it will ask you some questions to be able to connect to your BigBlueButton server. You will need the domain and the BBB sectet. To get the secret ssh into you BBB server and run:
+    
     ```bash
-    git clone https://github.com/bigbluebutton-bot/bbb-translation-bot
+    sudo bbb-conf --secret
+    ```
+
+## Developer setup
+
+If you want to develop on Windows WSL. This is ppossible. Continue reading at the WSL section.
+
+If you want to setup a developer environment you can run the following commands:
+
+```bash
+git clone --recurse-submodules -j8 https://github.com/bigbluebutton-bot/bbb-translation-bot
+cd bbb-translation-bot
+sudo make dev-setup
+```
+
+This will do the following:
+- Update System Packages
+- Install NVIDIA Drivers
+- Install NVIDIA CUDA
+- Reboot
+- Install NVIDIA cuDNN 8.9.7
+- Install Docker
+- Install golang
+- Install python3
+
+The script will reboot the system. Dont worry. It will automaticly continue after the reboot. To see the status of the script after the reboot you can run the following command:
+
+```bash
+sudo su
+screen -r 
+```
+
+
+
+
+## WSL
+
+If you want to develop on Windows WSL. This is possible. You can follow the following steps to get the project up and running.
+
+1. Install your [NVIDIA drivers](https://www.nvidia.com/en-us/drivers/) on your Windows machine. Accouding to this [article](https://docs.nvidia.com/cuda/wsl-user-guide/index.html#getting-started-with-cuda-on-wsl) WSL 2 should then have access to the drivers.
+2. Install WSL2. Fo that open PowerShell as an administrator and run the following command:
+
+    ```bash
+    wsl --install
+    ```
+
+3. Install Ubuntu22. You can do this by opening the [Microsoft Store](https://apps.microsoft.com/detail/9pn20msr04dw) and searching for Ubuntu22. Click on install and wait for the installation to complete.
+4. Go and downloade docker desktop from the [docker website](https://www.docker.com/products/docker-desktop). Install it and make sure to enable the WSL2 integration. Now open the Ubuntu22 terminal and try running the `docker` command.
+
+<details>
+  <summary>Fix for error: `The command 'docker' could not be found in this WSL 2 distro.`</summary>
+    If you get an error like this:
+
+    ```bash
+    $ docker
+
+    The command 'docker' could not be found in this WSL 2 distro.
+    We recommend to activate the WSL integration in Docker Desktop settings.
+
+    For details about using Docker Desktop with WSL 2, visit:
+
+    https://docs.docker.com/go/wsl2/
+    ```
+
+    Open docker desktop and go to settings. Then go to the resources tab and click on WSL integration. Enable the integration for Ubuntu22.
+    ![docker-settings](docs/imgs/enable-docker-in-wsl.png)
+
+    Thanks to this [post](https://stackoverflow.com/questions/63497928/ubuntu-wsl-with-docker-could-not-be-found).
+</details>
+
+
+5. Open the Ubuntu22 terminal and run the following command to update the system:
+
+    ```bash
+    git clone --recurse-submodules -j8 https://github.com/bigbluebutton-bot/bbb-translation-bot
     cd bbb-translation-bot
-    ```
+    sudo make dev-setup-wsl
 
-2. Configure the bot:
-Copy the example configuration file and modify it according to your preferences:
-    ```bash
-    cp .env_example .env
-    ```
 
-3. Launch the bot:
-With Docker, you can easily start the bot:
-    ```bash	
-    docker-compose up -d
-    ```
+    sudo apt install nvidia-cuda-dev -y
+    sudo apt install nvidia-cuda-toolkit -y
 
-# Development Setup
-To set up the environment for development purposes, follow the instructions below.
-## Server Setup
-1. Install Nvidia drivers for Ubuntu:
-Refer to the official [Nvidia documentation](https://docs.nvidia.com/datacenter/tesla/tesla-installation-notes/index.html#ubuntu-lts):
-    ```bash
-    sudo apt install linux-headers-$(uname -r)
-    distribution=$(. /etc/os-release;echo $ID$VERSION_ID | sed -e 's/\.//g')
-    wget https://developer.download.nvidia.com/compute/cuda/repos/$distribution/x86_64/cuda-keyring_1.0-1_all.deb
-    sudo dpkg -i cuda-keyring_1.0-1_all.deb
-    sudo apt update
-    sudo apt -y install cuda-drivers
-    sudo reboot now
-    ```
-
-2. Install Python dependencies:
-    ```bash
-    cd server
-    sudo apt update
-    sudo apt install python3-pip python3-dev ffmpeg -y
-    python3 -m venv .translation-server
-    source .translation-server/bin/activate
-    pip3 install -r requirements-server.txt --no-cache-dir
-    ```
-
-3. Run the server:
-    ```bash
-    python3 server.py
-    ```
-
-4. Exit the virtual environment:
-    ```bash
-    deactivate
-    ```
-
-5. Automate the creation of a RAM disk on system startup:
-Add the following line to your `/etc/fstab` file to set up a tmpfs RAM disk automatically on system boot. This allows for faster data processing and reduces wear on physical drives.
-    ```bash
-    sudo nano /etc/fstab
-    # Add this line at the end of the file:
-    tmpfs /mnt/ramdisk tmpfs nodev,nosuid,noexec,nodiratime,size=512M 0 0
-    # Create the mount directory if it does not exist:
-    sudo mkdir -p /mnt/ramdisk
-    ```
-
-## Client Setup
-1. Install Golang:
-    Follow the official [Golang installation guide](https://go.dev/doc/install):
-    ```bash
-    cd client
-    sudo apt update
-    wget https://go.dev/dl/go1.21.3.linux-amd64.tar.gz
-    sudo rm -rf /usr/local/go && sudo tar -C /usr/local -xzf go1.21.3.linux-amd64.tar.gz
-    export PATH=$PATH:/usr/local/go/bin
-    ```
-
-2. Install node.js:
-Use [Node Version Manager](https://github.com/nvm-sh/nvm) to install Node.js:
-   ```bash
-   curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.5/install.sh | bash
-   export NVM_DIR="$([ -z "${XDG_CONFIG_HOME-}" ] && printf %s "${HOME}/.nvm" || printf %s "${XDG_CONFIG_HOME}/nvm")"
-   [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh" # This loads nvm
-   nvm install node
-   ```
-
-3. Install Go dependencies:
-    ```bash
-    go get .
-    ```
-
-4. Run the client:
-    ```bash
-    go run .
     ```
