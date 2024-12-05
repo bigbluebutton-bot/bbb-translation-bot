@@ -3,34 +3,188 @@
 SCREEN_NAME="install_session"
 LOGIN_HINT_FILE="/etc/profile.d/install_hint.sh"
 
-# Capture parameters
-STARTED_BY_CRONJOB=false
-
-# get server architecture
-ARCHITECTURE=$(dpkg --print-architecture)
-
-if [ "$1" == "--cron" ]; then
-    STARTED_BY_CRONJOB=true
-fi
-
-# Main execution
+# Main execution: Define tasks and run the main function
 main() {
-    add_task "Update System Packages" update ""  # No skip function
-    add_task "Install NVIDIA Drivers" nvidia_install check_nvidia_driver  # Skip if drivers are installed
-    add_task "Install NVIDIA CUDA" cuda_install check_cuda_installed  # Skip if CUDA is installed
-    add_task "Install NVIDIA CUDA Toolkit" cuda_toolkit check_toolkit  # Skip if toolkit is installed
-    add_task "Reboot" configure_reboot check_reboot_configured  # Skip if reboot is needed
-    add_task "Install NVIDIA cuDNN 8.9.7" install_cudnn check_cudnn_installed  # Skip if cuDNN is installed
-    add_task "Install Docker" install_docker check_docker_installed  # Skip if Docker is installed
-    add_task "Install Docker with NVIDIA support" install_docker_nvidia check_docker_nvidia  # Skip if Docker with NVIDIA support is installed
-    add_task "Install golang" install_golang check_golang_installed  # Skip if golang is installed
-    add_task "Install python3" install_python3 check_python3_installed  # Skip if python3 is installed
+    if $INSTALL_ON_UBUNTU22; then
+        add_task "Update System Packages" update ""  # No skip function
+        add_task "Install NVIDIA Drivers" nvidia_install check_nvidia_driver  # Skip if drivers are installed
+        add_task "Install NVIDIA CUDA" cuda_install check_cuda_installed  # Skip if CUDA is installed
+        add_task "Install NVIDIA CUDA Toolkit" cuda_toolkit check_toolkit  # Skip if toolkit is installed
+        add_task "Reboot" configure_reboot_ubuntu22 check_reboot_configured_ubuntu22  # Skip if reboot is needed
+        add_task "Install NVIDIA cuDNN 8.9.7" install_cudnn check_cudnn_installed  # Skip if cuDNN is installed
+        add_task "Install Docker" install_docker check_docker_installed  # Skip if Docker is installed
+        add_task "Install Docker with NVIDIA support" install_docker_nvidia check_docker_nvidia  # Skip if Docker with NVIDIA support is installed
+        add_task "Install golang" install_golang check_golang_installed  # Skip if golang is installed
+        add_task "Install python3" install_python3 check_python3_installed  # Skip if python3 is installed
+    elif $INSTALL_SIMPLE_SETUP; then
+        add_task "Update System Packages" update ""  # No skip function
+        add_task "Install NVIDIA Drivers" nvidia_install check_nvidia_driver  # Skip if drivers are installed
+        add_task "Install NVIDIA CUDA" cuda_install check_cuda_installed  # Skip if CUDA is installed
+        add_task "Install NVIDIA CUDA Toolkit" cuda_toolkit check_toolkit  # Skip if toolkit is installed
+        add_task "Reboot" configure_reboot_simple check_reboot_configured_simple  # Skip if reboot is needed
+        add_task "Install Docker" install_docker check_docker_installed  # Skip if Docker is installed
+        add_task "Install Docker with NVIDIA support" install_docker_nvidia check_docker_nvidia  # Skip if Docker with NVIDIA support is installed
+    elif $INSTALL_ON_WSL; then
+        add_task "Update System Packages" update ""  # No skip function
+        add_task "Install NVIDIA CUDA Toolkit" cuda_toolkit check_toolkit  # Skip if toolkit is installed
+        add_task "Install golang" install_golang check_golang_installed  # Skip if golang is installed
+        add_task "Install python3" install_python3 check_python3_installed  # Skip if python3 is installed
+    fi
 
     # Process task-specific logic
     process_tasks
 }
 
+# Capture parameters
+INSTALL_ON_UBUNTU22=false
+INSTALL_ON_WSL=false
+INSTALL_SIMPLE_SETUP=false
+STARTED_BY_CRONJOB=false
+
+# Display help function
+show_help() {
+    echo "Usage: $0 [options]"
+    echo ""
+    echo "Options:"
+    # echo "  --cron         Indicate the script was started by a cronjob"
+    # echo "  --path         Specify the folder path (required with --cron)"
+    # echo "  --user         Specify the user (required with --cron)"
+    echo "  --simple-setup Perform a simple setup"
+    echo "  --ubuntu22     Install on Ubuntu 22.04"
+    echo "  --wsl          Install on Windows Subsystem for Linux with Ubuntu 22.04"
+    echo "  --help         Show this help message and exit"
+    exit 0
+}
+
+# Check if no arguments were provided
+if [ "$#" -eq 0 ]; then
+    show_help
+fi
+
+# Parse options
+while [[ "$1" != "" ]]; do
+    case "$1" in
+        --cron)
+            STARTED_BY_CRONJOB=true
+            ;;
+        --ubuntu22)
+            INSTALL_ON_UBUNTU22=true
+            ;;
+        --wsl)
+            INSTALL_ON_WSL=true
+            ;;
+        --simple-setup)
+            INSTALL_SIMPLE_SETUP=true
+            ;;
+        --user)
+            shift
+            if [ -z "$1" ] || [[ "$1" == -* ]]; then
+                echo "Error: --user requires a valid argument"
+                exit 1
+            fi
+            USER="$1"
+            ;;
+        --path)
+            shift
+            if [ -z "$1" ] || [[ "$1" == -* ]]; then
+                echo "Error: --path requires a valid folder path"
+                exit 1
+            fi
+            PATH_TO_FOLDER="$1"
+            ;;
+        --help)
+            show_help
+            ;;
+        *)
+            echo "Invalid option: $1"
+            show_help
+            ;;
+    esac
+    shift # Move to the next argument
+done
+
+# Validate allowed combinations
+if $INSTALL_SIMPLE_SETUP && ($INSTALL_ON_UBUNTU22 || $INSTALL_ON_WSL || $STARTED_BY_CRONJOB); then
+    echo "Invalid combination: --simple-setup cannot be combined with other options."
+    exit 1
+fi
+
+if $INSTALL_ON_UBUNTU22 && $INSTALL_ON_WSL; then
+    echo "Invalid combination: --ubuntu22 and --wsl cannot be used together."
+    exit 1
+fi
+
+if $STARTED_BY_CRONJOB && ! $INSTALL_ON_UBUNTU22; then
+    echo "Invalid combination: --cron must be used with --ubuntu22."
+    exit 1
+fi
+
+# Validate required options for --cron
+if [ "$STARTED_BY_CRONJOB" = true ]; then
+    if [ -z "$PATH_TO_FOLDER" ]; then
+        echo "Error: --cron requires --path to be set."
+        exit 1
+    fi
+    if [ -z "$USER" ]; then
+        echo "Error: --cron requires --user to be set."
+        exit 1
+    fi
+fi
+
+
+
 REBOOT_NEEDED=false
+
+#<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+#--------------------------  wsl  ---------------------------
+#<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+
+#>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+#--------------------------  wsl  ---------------------------
+#>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+
+
+
+
+
+#<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+#----------------------  simple-setup  ----------------------
+#<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+check_reboot_configured_simple() {
+    # if STARTED_BY_CRONJOB is true, then skip this task
+    if [ "$STARTED_BY_CRONJOB" = true ]; then
+        return 0
+    else
+    # if REBOOT_NEEDED is true
+        if [ "$REBOOT_NEEDED" = true ]; then
+            return 1
+        else
+            return 0
+        fi
+    fi
+}
+
+configure_reboot_simple() {
+    $REBOOT_OPTIONS="--simple-setup"
+    reboot_now
+}
+
+#>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+#----------------------  simple-setup  ----------------------
+#>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+
+
+
+
+
+
+#<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+#------------------------  ubuntu22  ------------------------
+#<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 #------------------------------------------------------------
 # 1. Update System Packages
@@ -90,13 +244,12 @@ check_toolkit() {
 
 cuda_toolkit() {
     apt install -y nvidia-cuda-toolkit nvtop
-    REBOOT_NEEDED=true
 }
 #------------------------------------------------------------
 
 #------------------------------------------------------------
 # 5. Configure Reboot
-check_reboot_configured() {
+check_reboot_configured_ubuntu22() {
     # if STARTED_BY_CRONJOB is true, then skip this task
     if [ "$STARTED_BY_CRONJOB" = true ]; then
         return 0
@@ -110,100 +263,9 @@ check_reboot_configured() {
     fi
 }
 
-configure_reboot() {
-    if ! grep -Fq "$FULL_PATH_OF_THIS_SCRIPT" /etc/crontab; then
-        echo "@reboot root /usr/bin/screen -dmS $SCREEN_NAME /bin/bash $FULL_PATH_OF_THIS_SCRIPT --cron" >> /etc/crontab
-    fi
-
-    # Add a login hint
-    cat << EOF > "$LOGIN_HINT_FILE"
-#!/bin/bash
-
-clear
-
-# Calculate the maximum line length for dynamic border adjustment
-MAX_LENGTH=0
-LINES=(
-    "        🚀  INSTALLATION IN PROGRESS IN BACKGROUND  🚀        "
-    "   The installation tasks are running in a 'screen' session   "
-    "   named:                                                     "
-    "        🖥️  SCREEN SESSION NAME: '$SCREEN_NAME'               "
-    "   To monitor the installation progress, please run:          "
-    "        📜  sudo su                                           "
-    "        📜  screen -r $SCREEN_NAME                            "
-    "   Once completed, a final message will be displayed here.    "
-)
-
-# Loop to determine the maximum line length
-for LINE in "\${LINES[@]}"; do
-    LENGTH=\${#LINE}
-    if (( LENGTH > MAX_LENGTH )); then
-        MAX_LENGTH=\$LENGTH
-    fi
-done
-
-# Create the top border
-echo -n "╔"
-for (( i = 0; i < MAX_LENGTH + 4; i++ )); do
-    echo -n "═"
-done
-echo "╗"
-
-# Print the message within the box
-for LINE in "\${LINES[@]}"; do
-    LENGTH=\${#LINE}
-
-    # Initialize extra_spaces and remove_spaces
-    extra_spaces=0
-    remove_spaces=0
-
-    # Adjust extra_spaces and remove_spaces based on the content of the line
-    if [[ \$LINE == *"🖥️"* ]]; then
-        extra_spaces=1
-        remove_spaces=0
-    elif [[ \$LINE == *"📜"* ]]; then
-        extra_spaces=0
-        remove_spaces=1
-    elif [[ \$LINE == *"🚀"* ]]; then
-        extra_spaces=0
-        remove_spaces=2
-    else
-        extra_spaces=0
-        remove_spaces=0
-    fi
-
-    # Adjust the number of spaces
-    num_spaces=\$(( MAX_LENGTH - LENGTH - remove_spaces ))
-    if (( num_spaces < 0 )); then
-        num_spaces=0
-    fi
-
-    # Create a string with num_spaces spaces
-    spaces=""
-    for (( i=0; i<num_spaces; i++ )); do
-        spaces+=" "
-    done
-
-    # Create a string with extra_spaces spaces
-    extra_spaces_str=""
-    for (( i=0; i<extra_spaces; i++ )); do
-        extra_spaces_str+=" "
-    done
-
-    printf "║  %s%s%s  ║\\n" "\$LINE" "\$spaces" "\$extra_spaces_str"
-done
-
-# Create the bottom border
-echo -n "╚"
-for (( i = 0; i < MAX_LENGTH + 4; i++ )); do
-    echo -n "═"
-done
-echo "╝"
-
-EOF
-
-    chmod +x "$LOGIN_HINT_FILE"
-    reboot now
+configure_reboot_ubuntu22() {
+    $REBOOT_OPTIONS="--ubuntu22"
+    reboot_now
 }
 #------------------------------------------------------------
 
@@ -277,6 +339,9 @@ check_golang_installed() {
     fi
 }
 
+# get server architecture
+ARCHITECTURE=$(dpkg --print-architecture)
+
 install_golang() {
     go_version=$(curl -s https://go.dev/VERSION?m=text | head -n 1 | sed 's/^go//')
     # Download the Go binary
@@ -312,6 +377,9 @@ install_python3() {
 }
 #------------------------------------------------------------
 
+#>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+#------------------------  Ubuntu22  ------------------------
+#>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
 
 
@@ -319,6 +387,27 @@ install_python3() {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+#<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+#--------------  SCRIPT STUFF: DONT TOUCH!!!  ---------------
+#<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+# Check if a screen session named "install_session" exists
+if screen -list | grep -q $SCREEN_NAME; then
+  echo "⏭️ Screen session '$SCREEN_NAME' is running. Attaching..."
+  screen -r $SCREEN_NAME
+  exit 0
 
 
 # Function to check for root privileges
@@ -455,5 +544,109 @@ process_tasks() {
     finalize_task_screen
 }
 
+$REBOOT_OPTIONS=""
+ORGINAL_USER=$SUDO_USER
+
+# Function to configure the system to reboot
+reboot_now() {
+    if ! grep -Fq "$FULL_PATH_OF_THIS_SCRIPT" /etc/crontab; then
+        echo "@reboot root /usr/bin/screen -dmS $SCREEN_NAME /bin/bash $FULL_PATH_OF_THIS_SCRIPT --cron $REBOOT_OPTIONS --path $SCRIPT_DIR --user $ORGINAL_USER" >> /etc/crontab
+    fi
+
+    # Add a login hint
+    cat << EOF > "$LOGIN_HINT_FILE"
+#!/bin/bash
+
+clear
+
+# Calculate the maximum line length for dynamic border adjustment
+MAX_LENGTH=0
+LINES=(
+    "        🚀  INSTALLATION IN PROGRESS IN BACKGROUND  🚀        "
+    "   The installation tasks are running in a 'screen' session   "
+    "   named:                                                     "
+    "        🖥️  SCREEN SESSION NAME: '$SCREEN_NAME'               "
+    "   To monitor the installation progress, please run:          "
+    "        📜  sudo su                                           "
+    "        📜  screen -r $SCREEN_NAME                            "
+    "   Once completed, a final message will be displayed here.    "
+)
+
+# Loop to determine the maximum line length
+for LINE in "\${LINES[@]}"; do
+    LENGTH=\${#LINE}
+    if (( LENGTH > MAX_LENGTH )); then
+        MAX_LENGTH=\$LENGTH
+    fi
+done
+
+# Create the top border
+echo -n "╔"
+for (( i = 0; i < MAX_LENGTH + 4; i++ )); do
+    echo -n "═"
+done
+echo "╗"
+
+# Print the message within the box
+for LINE in "\${LINES[@]}"; do
+    LENGTH=\${#LINE}
+
+    # Initialize extra_spaces and remove_spaces
+    extra_spaces=0
+    remove_spaces=0
+
+    # Adjust extra_spaces and remove_spaces based on the content of the line
+    if [[ \$LINE == *"🖥️"* ]]; then
+        extra_spaces=1
+        remove_spaces=0
+    elif [[ \$LINE == *"📜"* ]]; then
+        extra_spaces=0
+        remove_spaces=1
+    elif [[ \$LINE == *"🚀"* ]]; then
+        extra_spaces=0
+        remove_spaces=2
+    else
+        extra_spaces=0
+        remove_spaces=0
+    fi
+
+    # Adjust the number of spaces
+    num_spaces=\$(( MAX_LENGTH - LENGTH - remove_spaces ))
+    if (( num_spaces < 0 )); then
+        num_spaces=0
+    fi
+
+    # Create a string with num_spaces spaces
+    spaces=""
+    for (( i=0; i<num_spaces; i++ )); do
+        spaces+=" "
+    done
+
+    # Create a string with extra_spaces spaces
+    extra_spaces_str=""
+    for (( i=0; i<extra_spaces; i++ )); do
+        extra_spaces_str+=" "
+    done
+
+    printf "║  %s%s%s  ║\\n" "\$LINE" "\$spaces" "\$extra_spaces_str"
+done
+
+# Create the bottom border
+echo -n "╚"
+for (( i = 0; i < MAX_LENGTH + 4; i++ )); do
+    echo -n "═"
+done
+echo "╝"
+
+EOF
+
+    chmod +x "$LOGIN_HINT_FILE"
+    reboot now
+}
+
 # Run the main function
 main
+
+#>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+#--------------  SCRIPT STUFF: DONT TOUCH!!!  ---------------
+#>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
