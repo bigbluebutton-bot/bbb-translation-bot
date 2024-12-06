@@ -23,7 +23,7 @@ endif
 
 build:
 	@cd bot && go mod tidy
-	@cd changeset-grpc && npm install
+	@cd changeset-grpc && npm install && cd etherpad-lite && src/bin/installDeps.sh
 	@cd transcription-service && \
 		[ -d ".venv" ] || python3 -m venv .venv && \
 		bash -c "source .venv/bin/activate && pip install -r requirements.txt && deactivate"
@@ -33,16 +33,16 @@ run: install stop
 	@docker compose up -d
 
 run-dev: install-dev stop-dev build
-	@screen -dmS bot bash -c "cd bot && export $$(cat ../.env | xargs) && go run . 2>&1 | tee ../logs/bot.log"
-	@screen -dmS changeset-grpc bash -c "cd changeset-grpc && export $$(cat ../.env | xargs) && npm run start 2>&1 | tee ../logs/changeset-grpc.log"
-	@screen -dmS transcription-service bash -c "cd transcription-service && source .venv/bin/activate && export $$(cat ../.env | xargs) && python app.py 2>&1 | tee ../logs/transcription-service.log"
+	@screen -dmS bot bash -c "cd bot && export $(cat ../.env | xargs) && go run . 2>&1 | tee ../logs/bot.log"
+	@screen -dmS changeset-grpc bash -c "cd changeset-grpc && export $(cat ../.env | xargs) && npm run start 2>&1 | tee ../logs/changeset-grpc.log"
+	@screen -dmS transcription-service bash -c "cd transcription-service && source .venv/bin/activate && export $(cat ../.env | xargs) && python main.py 2>&1 | tee ../logs/transcription-service.log"
 	@screen -dmS translation-service bash -c "docker compose -f docker-compose-dev.yml up translation-service 2>&1 | tee logs/translation-service.log"
 	@screen -dmS prometheus bash -c "docker compose -f docker-compose-dev.yml up prometheus  2>&1 | tee logs/prometheus.log"
 
 run-dev-docker: install-dev stop-dev-docker
 	@docker compose -f docker-compose-dev.yml up -d
 
-stop:
+stop: stop-dev stop-dev-docker
 	@docker compose down
 
 stop-dev:
