@@ -1,3 +1,5 @@
 .vscode
 .vscode/*
 .env
+*.log
+*.tar.gz
