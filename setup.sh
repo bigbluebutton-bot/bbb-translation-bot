@@ -16,6 +16,7 @@ main() {
         add_task "Install Docker with NVIDIA support" install_docker_nvidia check_docker_nvidia  # Skip if Docker with NVIDIA support is installed
         add_task "Install golang" install_golang check_golang_installed  # Skip if golang is installed
         add_task "Install python3" install_python3 check_python3_installed  # Skip if python3 is installed
+        add_task "Install nodejs" install_nodejs check_nodejs_installed  # Skip if nodejs is installed
     elif $INSTALL_SIMPLE_SETUP; then
         add_task "Update System Packages" update ""  # No skip function
         add_task "Install NVIDIA Drivers" nvidia_install check_nvidia_driver  # Skip if drivers are installed
@@ -29,6 +30,7 @@ main() {
         add_task "Install NVIDIA CUDA Toolkit" cuda_toolkit check_toolkit  # Skip if toolkit is installed
         add_task "Install golang" install_golang check_golang_installed  # Skip if golang is installed
         add_task "Install python3" install_python3 check_python3_installed  # Skip if python3 is installed
+        add_task "Install nodejs" install_nodejs check_nodejs_installed  # Skip if nodejs is installed
     fi
 
     # Process task-specific logic
@@ -444,6 +446,54 @@ install_python3() {
     # Use the detected version to install the appropriate venv package
     apt install -y python${PYTHON_VERSION}-venv
 }
+#------------------------------------------------------------
+
+#------------------------------------------------------------
+# 11. Install nodejs
+check_nodejs_installed() {
+    if command -v node &> /dev/null; then
+        # Print Node.js version if installed
+        echo "Node.js $(node -v) is already installed."
+        return 0
+    else
+        echo "Node.js is not installed."
+        return 1
+    fi
+}
+
+install_nodejs() {
+    USER_HOME=$(eval echo "~$SUDO_USER")
+    NVM_VERSION="v0.40.1"
+    NVM_INSTALL_URL="https://raw.githubusercontent.com/nvm-sh/nvm/${NVM_VERSION}/install.sh"
+
+    # Install nvm if not already installed
+    if [ ! -d "${USER_HOME}/.nvm" ]; then
+        echo "Installing NVM for user $SUDO_USER..."
+        sudo -u "$SUDO_USER" -H bash -c "curl -o- $NVM_INSTALL_URL | bash"
+    else
+        echo "NVM already seems to be installed at ${USER_HOME}/.nvm"
+    fi
+
+    NVM_INIT_LINES='
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+'
+
+    BASHRC_FILE="${USER_HOME}/.bashrc"
+    if ! sudo -u "$SUDO_USER" grep -q 'NVM_DIR' "$BASHRC_FILE"; then
+        echo "Adding NVM initialization lines to ${BASHRC_FILE}"
+        echo "$NVM_INIT_LINES" | sudo -u "$SUDO_USER" tee -a "$BASHRC_FILE" > /dev/null
+    else
+        echo "NVM initialization lines already found in ${BASHRC_FILE}"
+    fi
+
+    # Source NVM directly, then install and use Node
+    sudo -u "$SUDO_USER" bash -c "export NVM_DIR=\"$USER_HOME/.nvm\" && [ -s \"$USER_HOME/.nvm/nvm.sh\" ] && \. \"$USER_HOME/.nvm/nvm.sh\" && nvm install node && nvm use node"
+
+    echo "Node.js and NVM installed for $SUDO_USER. NVM and Node should now be available. Pls typpe 'source ~/.bashrc' to use Node.js"
+}
+
+
 #------------------------------------------------------------
 
 #>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
