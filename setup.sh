@@ -37,6 +37,33 @@ main() {
     process_tasks
 }
 
+CHECK_DEPENDENCIES=false
+check_dependencies() {
+    if $INSTALL_ON_UBUNTU22; then
+        check_nvidia_driver || exit 1
+        check_cuda_installed || exit 1
+        check_toolkit || exit 1
+        check_cudnn_installed || exit 1
+        check_docker_installed || exit 1
+        check_docker_nvidia || exit 1
+        check_golang_installed || exit 1
+        check_python3_installed || exit 1
+        check_nodejs_installed || exit 1
+    elif $INSTALL_SIMPLE_SETUP; then
+        check_nvidia_driver || exit 1
+        check_cuda_installed || exit 1
+        check_toolkit || exit 1
+        check_docker_installed || exit 1
+        check_docker_nvidia || exit 1
+    elif $INSTALL_ON_WSL; then
+        check_toolkit || exit 1
+        check_golang_installed || exit 1
+        check_python3_installed || exit 1
+        check_nodejs_installed || exit 1
+    fi
+    exit 0
+}
+
 # Capture parameters
 INSTALL_ON_UBUNTU22=false
 INSTALL_ON_WSL=false
@@ -55,6 +82,7 @@ show_help() {
     echo "  --ubuntu22     Install on Ubuntu 22.04"
     echo "  --wsl          Install on Windows Subsystem for Linux with Ubuntu 22.04"
     echo "  --help         Show this help message and exit"
+    echo "  --check        Check all dependencies are already installed. Use with --ubuntu22, --wsl, or --simple-setup"
     exit 0
 }
 
@@ -93,6 +121,9 @@ while [[ "$1" != "" ]]; do
                 exit 1
             fi
             PATH_TO_FOLDER="$1"
+            ;;
+        --check)
+            CHECK_DEPENDENCIES=true
             ;;
         --help)
             show_help
@@ -430,11 +461,30 @@ install_golang() {
 # 10. Install python3
 check_python3_installed() {
     if command -v python3 &> /dev/null; then
-        return 0
+        echo "Python 3 is installed."
     else
+        echo "Python 3 is not installed."
         return 1
     fi
+
+    if command -v pip3 &> /dev/null; then
+        echo "Pip 3 is installed."
+    else
+        echo "Pip 3 is not installed."
+        return 1
+    fi
+
+    python3 -m venv --help &> /dev/null
+    if [ $? -eq 0 ]; then
+        echo "Python venv module is installed."
+    else
+        echo "Python venv module is not installed."
+        return 1
+    fi
+
+    return 0
 }
+
 
 install_python3() {
     # Install the latest available Python 3 version and pip
@@ -451,12 +501,22 @@ install_python3() {
 #------------------------------------------------------------
 # 11. Install nodejs
 check_nodejs_installed() {
-    if command -v node &> /dev/null; then
-        # Print Node.js version if installed
-        echo "Node.js $(node -v) is already installed."
-        return 0
+    USER_HOME=$(eval echo "~$SUDO_USER")
+    NVM_DIR="${USER_HOME}/.nvm"
+
+    # Check if NVM is installed for the user
+    if [ -s "${NVM_DIR}/nvm.sh" ]; then
+        # Load NVM and check for Node.js
+        if sudo -u "$SUDO_USER" bash -c "export NVM_DIR='${NVM_DIR}'; [ -s '${NVM_DIR}/nvm.sh' ] && . '${NVM_DIR}/nvm.sh' && command -v node" &> /dev/null; then
+            NODE_VERSION=$(sudo -u "$SUDO_USER" bash -c "export NVM_DIR='${NVM_DIR}'; [ -s '${NVM_DIR}/nvm.sh' ] && . '${NVM_DIR}/nvm.sh' && node -v")
+            echo "Node.js ${NODE_VERSION} is already installed."
+            return 0
+        else
+            echo "Node.js is not installed."
+            return 1
+        fi
     else
-        echo "Node.js is not installed."
+        echo "NVM is not installed, so Node.js cannot be found."
         return 1
     fi
 }
@@ -771,6 +831,10 @@ EOF
     reboot now
 }
 
+if [ "$CHECK_DEPENDENCIES" = true ]; then
+    check_dependencies
+    exit 0
+fi
 # Run the main function
 main
 
