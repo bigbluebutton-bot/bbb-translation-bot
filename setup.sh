@@ -168,7 +168,7 @@ check_reboot_configured_simple() {
 }
 
 configure_reboot_simple() {
-    $REBOOT_OPTIONS="--simple-setup"
+    REBOOT_OPTIONS="--simple-setup"
     reboot_now
 }
 
@@ -220,14 +220,47 @@ check_cuda_installed() {
 }
 
 cuda_install() {
-    wget -q https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.0-1_all.deb
-    dpkg -i cuda-keyring_1.0-1_all.deb
-    rm -f cuda-keyring_1.0-1_all.deb
+    # Download and install the CUDA keyring
+    wget -q -O /tmp/cuda-keyring_1.0-1_all.deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.0-1_all.deb
+    dpkg -i /tmp/cuda-keyring_1.0-1_all.deb
+    rm -f /tmp/cuda-keyring_1.0-1_all.deb
+
+    # Update and install CUDA
     apt-get update
     apt-get -y install cuda
-    echo 'export PATH=/usr/local/cuda-12.0/bin:$PATH' >> ~/.bashrc
-    echo 'export LD_LIBRARY_PATH=/usr/local/cuda-12.0/lib64:$LD_LIBRARY_PATH' >> ~/.bashrc
-    source ~/.bashrc
+
+    # Update PATH and LD_LIBRARY_PATH for the current root session
+    export PATH=/usr/local/cuda-12.0/bin:$PATH
+    export LD_LIBRARY_PATH=/usr/local/cuda-12.0/lib64:$LD_LIBRARY_PATH
+
+    # Update PATH and LD_LIBRARY_PATH in root's .bashrc
+    if ! grep -q '/usr/local/cuda-12.0/bin' /root/.bashrc; then
+        echo 'export PATH=/usr/local/cuda-12.0/bin:$PATH' >> /root/.bashrc
+    fi
+    if ! grep -q '/usr/local/cuda-12.0/lib64' /root/.bashrc; then
+        echo 'export LD_LIBRARY_PATH=/usr/local/cuda-12.0/lib64:$LD_LIBRARY_PATH' >> /root/.bashrc
+    fi
+
+    # Update PATH and LD_LIBRARY_PATH for the original user
+    if [[ -n "$SUDO_USER" ]]; then
+        ORIGINAL_USER_HOME=$(eval echo ~$SUDO_USER)
+        ORIGINAL_USER_BASHRC="$ORIGINAL_USER_HOME/.bashrc"
+        
+        # Update .bashrc for the original user
+        if ! grep -q '/usr/local/cuda-12.0/bin' "$ORIGINAL_USER_BASHRC"; then
+            echo 'export PATH=/usr/local/cuda-12.0/bin:$PATH' >> "$ORIGINAL_USER_BASHRC"
+        fi
+        if ! grep -q '/usr/local/cuda-12.0/lib64' "$ORIGINAL_USER_BASHRC"; then
+            echo 'export LD_LIBRARY_PATH=/usr/local/cuda-12.0/lib64:$LD_LIBRARY_PATH' >> "$ORIGINAL_USER_BASHRC"
+        fi
+
+        # Apply the changes to the original user's current session (if possible)
+        if ps -p "$PPID" -o comm= | grep -q bash; then
+            su - "$SUDO_USER" -c "export PATH=/usr/local/cuda-12.0/bin:\$PATH && export LD_LIBRARY_PATH=/usr/local/cuda-12.0/lib64:\$LD_LIBRARY_PATH"
+        fi
+    fi
+
+    # Flag for reboot
     REBOOT_NEEDED=true
 }
 #------------------------------------------------------------
@@ -264,7 +297,7 @@ check_reboot_configured_ubuntu22() {
 }
 
 configure_reboot_ubuntu22() {
-    $REBOOT_OPTIONS="--ubuntu22"
+    REBOOT_OPTIONS="--ubuntu22"
     reboot_now
 }
 #------------------------------------------------------------
@@ -343,14 +376,50 @@ check_golang_installed() {
 ARCHITECTURE=$(dpkg --print-architecture)
 
 install_golang() {
+    # Get the latest Go version
     go_version=$(curl -s https://go.dev/VERSION?m=text | head -n 1 | sed 's/^go//')
-    # Download the Go binary
-    wget -q "https://golang.org/dl/go${go_version}.linux-${ARCHITECTURE}.tar.gz"
+    
+    # Temporary directory for downloading
+    TEMP_DIR="/temp"
+    mkdir -p "$TEMP_DIR"
+    GO_ARCHIVE="${TEMP_DIR}/go${go_version}.linux-${ARCHITECTURE}.tar.gz"
+    
+    # Download the Go binary and overwrite if it exists
+    wget -q -O "$GO_ARCHIVE" "https://golang.org/dl/go${go_version}.linux-${ARCHITECTURE}.tar.gz"
+    
+    # Remove any existing Go installation
     rm -rf /usr/local/go
-    tar -C /usr/local -xzf go${go_version}.linux-${ARCHITECTURE}.tar.gz
+    
+    # Extract the Go archive to /usr/local
+    tar -C /usr/local -xzf "$GO_ARCHIVE"
+    
+    # Update PATH for the current (root) session
     export PATH=$PATH:/usr/local/go/bin
-    if ! grep -q '/usr/local/go/bin' ~/.bashrc; then
-        echo 'export PATH=$PATH:/usr/local/go/bin' >> ~/.bashrc
+    
+    # Update PATH in root's .bashrc
+    if ! grep -q '/usr/local/go/bin' /root/.bashrc; then
+        echo 'export PATH=$PATH:/usr/local/go/bin' >> /root/.bashrc
+    fi
+
+    # Update PATH for the original user
+    if [[ -n "$SUDO_USER" ]]; then
+        ORIGINAL_USER_HOME=$(eval echo ~$SUDO_USER)
+        ORIGINAL_USER_BASHRC="$ORIGINAL_USER_HOME/.bashrc"
+        
+        # Add Go binary to the original user's PATH permanently
+        if ! grep -q '/usr/local/go/bin' "$ORIGINAL_USER_BASHRC"; then
+            echo 'export PATH=$PATH:/usr/local/go/bin' >> "$ORIGINAL_USER_BASHRC"
+        fi
+
+        # Update the PATH for the original user's current session (if possible)
+        if ps -p "$PPID" -o comm= | grep -q bash; then
+            su - "$SUDO_USER" -c "export PATH=\$PATH:/usr/local/go/bin"
+        fi
+    else
+        # For non-sudo cases, modify the current user's .bashrc
+        if ! grep -q '/usr/local/go/bin' ~/.bashrc; then
+            echo 'export PATH=$PATH:/usr/local/go/bin' >> ~/.bashrc
+        fi
     fi
 }
 #------------------------------------------------------------
@@ -408,12 +477,18 @@ if screen -list | grep -q $SCREEN_NAME; then
   echo "⏭️ Screen session '$SCREEN_NAME' is running. Attaching..."
   screen -r $SCREEN_NAME
   exit 0
+fi
 
 
 # Function to check for root privileges
 check_root() {
     if [ "$EUID" -ne 0 ]; then
-        echo "❌ This script must be run as root. Please use 'sudo' or run as root." > /dev/tty
+        echo "❌ This script must be run with sudo. Please use 'sudo'." > /dev/tty
+        exit 1
+    fi
+
+    if [[ -n "$SUDO_USER" ]]; then
+        echo "❌ This script must be run from a normal user account with sudo privileges." > /dev/tty
         exit 1
     fi
 }
@@ -544,7 +619,7 @@ process_tasks() {
     finalize_task_screen
 }
 
-$REBOOT_OPTIONS=""
+REBOOT_OPTIONS=""
 ORGINAL_USER=$SUDO_USER
 
 # Function to configure the system to reboot
