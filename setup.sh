@@ -487,7 +487,7 @@ check_root() {
         exit 1
     fi
 
-    if [[ -n "$SUDO_USER" ]]; then
+    if [ "$SUDO_USER" == "" ]; then
         echo "❌ This script must be run from a normal user account with sudo privileges." > /dev/tty
         exit 1
     fi
@@ -502,6 +502,8 @@ SCRIPT_DIR=$(dirname "$FULL_PATH_OF_THIS_SCRIPT")
 
 # Set up the log file
 LOG_FILE="$SCRIPT_DIR/install.log"
+touch "$LOG_FILE"
+chown "$SUDO_USER:$SUDO_USER" "$LOG_FILE"
 
 # Redirect stdout and stderr to the log file
 exec >>"$LOG_FILE" 2>&1
