@@ -1,6 +1,6 @@
 [submodule "changeset-grpc"]
 	path = changeset-grpc
-	url = https://github.com/bigbluebutton-bot/transcription-service.git
+	url = https://github.com/bigbluebutton-bot/changeset-grpc.git
 [submodule "transcription-service"]
 	path = transcription-service
 	url = https://github.com/bigbluebutton-bot/transcription-service.git
