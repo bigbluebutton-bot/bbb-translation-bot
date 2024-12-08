@@ -352,10 +352,48 @@ check_cudnn_installed() {
 }
 
 install_cudnn() {
-    wget -q https://developer.download.nvidia.com/compute/cudnn/secure/8.9.7/local_installers/12.x/cudnn-local-repo-ubuntu2204-8.9.7.29_1.0-1_amd64.deb
+    tput clear > /dev/tty
+    tput cup 0 0 > /dev/tty
+    tput ed > /dev/tty
+    echo -e "\e[1;31m============================== ATTENTION REQUIRED ==============================\e[0m" > /dev/tty
+    echo -e "\e[1;33mNVIDIA has restricted direct downloads of libcudnn packages.\e[0m" > /dev/tty
+    echo -e "\e[1;33mPlease follow the steps below:\e[0m" > /dev/tty
+    echo -e "\e[1;32m1. Visit: \e[1;34mhttps://developer.nvidia.com/rdp/cudnn-archive\e[0m" > /dev/tty
+    echo -e "\e[1;32m2. Download: \e[1;34mLocal Installer for Ubuntu 22.04 x86_64 (Deb)\e[0m" > /dev/tty
+    echo -e "\e[1;32m3. Save the file in this directory as: \e[1;34mcudnn-local-repo-ubuntu2204-8.9.7.29_1.0-1_amd64.deb\e[0m" > /dev/tty
+    echo -e "\e[1;33mThe script will continue automatically once the file is detected.\e[0m" > /dev/tty
+    echo -e "\e[1;31m================================================================================\e[0m" > /dev/tty
+
+    # Full-screen effect (clears the screen)
+    echo -e "\e[1;33mWaiting for cudnn-local-repo-ubuntu2204-8.9.7.29_1.0-1_amd64.deb to be saved in the current directory...\e[0m" > /dev/tty
+
+    # Wait for the file to appear
+    while true; do
+        if [ -f "cudnn-local-repo-ubuntu2204-8.9.7.29_1.0-1_amd64.deb" ]; then
+            # File exists, now check for stability
+            previous_size=$(stat -c%s "cudnn-local-repo-ubuntu2204-8.9.7.29_1.0-1_amd64.deb")
+            sleep 5
+            current_size=$(stat -c%s "cudnn-local-repo-ubuntu2204-8.9.7.29_1.0-1_amd64.deb")
+            
+            if [ "$previous_size" -eq "$current_size" ]; then
+                echo -e "\e[1;32mFile detected and is stable. Proceeding with the installation...\e[0m" > /dev/tty
+                break
+            else
+                echo -e "\e[1;33mcudnn-local-repo-ubuntu2204-8.9.7.29_1.0-1_amd64.deb was detected, but is still being downloaded...\e[0m" > /dev/tty
+            fi
+        fi
+        sleep 5
+        tput cuu1 > /dev/tty
+    done
+
+    # Go back to the task screen
+    tput clear > /dev/tty
+    update_task_status
+
+
+    # Proceed with installation
     dpkg -i cudnn-local-repo-ubuntu2204-8.9.7.29_1.0-1_amd64.deb
-    rm -f cudnn-local-repo-ubuntu2204-8.9.7.29_1.0-1_amd64.deb
-    apt-key add /var/cudnn-local-repo-*/7fa2af80.pub
+    cp /var/cudnn-local-repo-*/cudnn-local-*-keyring.gpg /usr/share/keyrings/
     apt-get update
     apt-get install -y libcudnn8 libcudnn8-dev
 }
