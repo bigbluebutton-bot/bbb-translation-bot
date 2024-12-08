@@ -501,6 +501,10 @@ install_python3() {
 #------------------------------------------------------------
 # 11. Install nodejs
 check_nodejs_installed() {
+    if [ -z "$SUDO_USER" ]; then
+        SUDO_USER=$(whoami)
+    fi
+
     USER_HOME=$(eval echo "~$SUDO_USER")
     NVM_DIR="${USER_HOME}/.nvm"
 
@@ -602,9 +606,6 @@ check_root() {
         exit 1
     fi
 }
-
-# Check for root access
-check_root
 
 # Get the full path and directory of the script
 FULL_PATH_OF_THIS_SCRIPT=$(readlink -f "$0")
@@ -835,6 +836,10 @@ if [ "$CHECK_DEPENDENCIES" = true ]; then
     check_dependencies
     exit 0
 fi
+
+# Check for root access
+check_root
+
 # Run the main function
 main
 
