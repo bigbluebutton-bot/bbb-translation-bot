@@ -4,17 +4,14 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	api "github.com/bigbluebutton-bot/bigbluebutton-bot/api"
-
-	"github.com/joho/godotenv"
 
 	bot "github.com/bigbluebutton-bot/bigbluebutton-bot"
 
@@ -27,7 +24,10 @@ import (
 
 func main() {
 
-	conf := loadConfig()
+	conf, err := LoadSettings()
+	if err != nil {
+		panic(err)
+	}
 
 	// Wait for the transcription server to start by making a http request to http://{conf.TranscriptionServer.Host}:8001/health
 	// Retry 10 times with 10 second delay
@@ -371,7 +371,7 @@ func translate(apiURL, text, sourceLang, targetLang string) (string, error) {
 	defer resp.Body.Close()
 
 	// Read the response body
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", fmt.Errorf("error reading response body: %w", err)
 	}
@@ -413,7 +413,7 @@ func removeBot(client *bot.Client, meetingID, botName string) {
 
 // Wait for the transcription server to start by making a http request to http://{conf.TranscriptionServer.Host}:{conf.TranscriptionServer.Port}/health
 // Retry 10 times with 10 second delay
-func waitForServer(conf *config) {
+func waitForServer(conf *Settings) {
 	// Define the URL using the configuration values
 	url := fmt.Sprintf("http://%s:%d/health", conf.TranscriptionServer.ExternalHost, conf.TranscriptionServer.HealthCheckPort)
 
@@ -455,156 +455,4 @@ func waitForServer(conf *config) {
 			time.Sleep(10 * time.Second)
 		}
 	}
-}
-
-// This part is for loading the config from .env file or the environment vars
-
-type config struct {
-	BBB struct {
-		API struct {
-			URL    string
-			Secret string
-			SHA    api.SHA
-		}
-		Client struct {
-			URL string
-			WS  string
-		}
-		Pad struct {
-			URL string
-			WS  string
-		}
-		WebRTC struct {
-			WS string
-		}
-	}
-	ChangeSet struct {
-		External bool
-		Host     string
-		Port     int
-	}
-	TranscriptionServer struct {
-		ExternalHost    string
-		PortTCP         int
-		Secret          string
-		HealthCheckPort int
-	}
-	TranslationServer struct {
-		URL    string
-		Secret string
-	}
-}
-
-func validateURL(envVar string, value string) (string, error) {
-	if strings.HasPrefix(value, "http://") || strings.HasPrefix(value, "https://") {
-		return value, nil
-	}
-	return "", fmt.Errorf("%s must be a valid URL", envVar)
-}
-
-func validateWS(envVar string, value string) (string, error) {
-	if strings.HasPrefix(value, "ws://") || strings.HasPrefix(value, "wss://") {
-		return value, nil
-	}
-	return "", fmt.Errorf("%s must be a valid WebSocket URL", envVar)
-}
-
-func validateBoolean(envVar string, value string) (string, error) {
-	if value == "true" || value == "false" {
-		return value, nil
-	}
-	return "", fmt.Errorf("%s must be 'true' or 'false'", envVar)
-}
-
-func validateInteger(envVar string, value string) (string, error) {
-	_, err := strconv.Atoi(value)
-	if err != nil {
-		return "", fmt.Errorf("%s must be an integer", envVar)
-	}
-	return value, nil
-}
-
-func validateFloat(envVar string, value string) (string, error) {
-	_, err := strconv.ParseFloat(value, 64)
-	if err != nil {
-		return "", fmt.Errorf("%s must be a float", envVar)
-	}
-	return value, nil
-}
-
-func validateString(envVar string, value string) (string, error) {
-	if value != "" {
-		return value, nil
-	}
-	return "", fmt.Errorf("%s must be a non-empty string", envVar)
-}
-
-func loadConfig() *config {
-	godotenv.Load() // Load the .env file
-
-	conf := &config{}
-	var hasErrors bool
-
-	get_variable := func(env_var string, default_var string, validate_func func(envVar string, value string) (string, error)) string {
-		value, exists := os.LookupEnv(env_var)
-		if !exists {
-			return default_var
-		}
-		if validate_func != nil {
-			validatedValue, err := validate_func(env_var, value)
-			if err != nil {
-				hasErrors = true
-				fmt.Printf("Error in %s: %s\n", env_var, err)
-				return default_var
-			}
-			return validatedValue
-		}
-		return value
-	}
-
-	var err error
-
-	// Populate config struct using get_variable
-	conf.BBB.API.URL = get_variable("BBB_API_URL", "https://example.com/bigbluebutton/api/", validateURL)
-	conf.BBB.API.Secret = get_variable("BBB_API_SECRET", "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX", validateString)
-	conf.BBB.API.SHA = api.SHA(get_variable("BBB_API_SHA", "SHA256", validateString))
-
-	conf.BBB.Client.URL = get_variable("BBB_CLIENT_URL", "https://example.com/html5client/", validateURL)
-	conf.BBB.Client.WS = get_variable("BBB_CLIENT_WS", "wss://example.com/html5client/websocket", validateWS)
-
-	conf.BBB.Pad.URL = get_variable("BBB_PAD_URL", "https://example.com/pad/", validateURL)
-	conf.BBB.Pad.WS = get_variable("BBB_PAD_WS", "wss://example.com/pad/", validateWS)
-
-	conf.BBB.WebRTC.WS = get_variable("BBB_WEBRTC_WS", "wss://example.com/bbb-webrtc-sfu", validateWS)
-
-	conf.ChangeSet.External = get_variable("CHANGESET_EXTERNAL", "true", validateBoolean) == "true"
-	conf.ChangeSet.Host = get_variable("CHANGESET_HOST", "localhost", validateString)
-	conf.ChangeSet.Port, err = strconv.Atoi(get_variable("CHANGESET_PORT", "5051", validateInteger))
-	if err != nil {
-		fmt.Println("Error in CHANGESET_PORT:", err)
-		hasErrors = true
-	}
-
-	conf.TranscriptionServer.ExternalHost = get_variable("TRANSCRIPTION_SERVER_EXTERNAL_HOST", "localhost", validateString)
-	conf.TranscriptionServer.PortTCP, err = strconv.Atoi(get_variable("TRANSCRIPTION_SERVER_PORT_TCP", "5000", validateInteger))
-	if err != nil {
-		fmt.Println("Error in TRANSCRIPTION_SERVER_PORT_TCP:", err)
-		hasErrors = true
-	}
-	conf.TranscriptionServer.Secret = get_variable("TRANSCRIPTION_SERVER_SECRET", "your_secret_token", validateString)
-	conf.TranscriptionServer.HealthCheckPort, err = strconv.Atoi(get_variable("TRANSCRIPTION_SERVER_HEALTHCHECK_PORT", "8001", validateInteger))
-	if err != nil {
-		fmt.Println("Error in TRANSCRIPTION_SERVER_HEALTHCHECK_PORT:", err)
-		hasErrors = true
-	}
-
-	conf.TranslationServer.URL = get_variable("TRANSLATION_SERVER_URL", "localhost", validateString)
-	conf.TranslationServer.Secret = get_variable("TRANSLATION_SERVER_SECRET", "your_secret_token", validateString)
-
-	if hasErrors {
-		fmt.Println("Configuration errors found. Exiting program.")
-		os.Exit(1)
-	}
-
-	return conf
 }
