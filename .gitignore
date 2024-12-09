@@ -1,6 +1,6 @@
 .vscode
 .vscode/*
-.env
+.env*
 *.log
 *.tar.gz
 *.deb

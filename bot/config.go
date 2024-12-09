@@ -109,7 +109,6 @@ func LoadSettings() (*Settings, error) {
 	cfg.TranscriptionServer.HealthCheckPort = mustInt("TRANSCRIPTION_SERVER_HEALTH_CHECK_PORT")
 
 	cfg.TranslationServer.URL = mustString("TRANSLATION_SERVER_URL")
-	cfg.TranslationServer.Secret = mustString("TRANSLATION_SERVER_SECRET")
 
 
 	// If any errors were recorded, return them as a single error

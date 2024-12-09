@@ -40,19 +40,24 @@ build:
 		bash -c "source .venv/bin/activate && pip install -r requirements.txt && deactivate"; \
 	fi
 
+generate-env-files:
+	@if [ ! -f .env -o ! -f .env-dev -o ! -f .env-dev-docker ]; then \
+		./generate-env.sh; \
+	fi
 
-run: install stop
+
+run: generate-env-files install stop
 	@docker compose up -d
 
-run-dev: install-dev stop-dev build
-	@screen -dmS bot bash -c "cd bot && set -a && source ../.env && set +a && go run . 2>&1 | tee ../logs/bot.log"
-	@screen -dmS changeset-grpc bash -c "cd changeset-grpc && set -a && source ../.env && set +a && npm run start 2>&1 | tee ../logs/changeset-grpc.log"
-	@screen -dmS transcription-service bash -c "cd transcription-service && source .venv/bin/activate && set -a && source ../.env && set +a && python main.py 2>&1 | tee ../logs/transcription-service.log"
+run-dev: generate-env-files install-dev stop build
+	@screen -dmS bot bash -c "cd bot && set -a && source ../.env-dev && set +a && go run . 2>&1 | tee ../logs/bot.log"
+	@screen -dmS changeset-grpc bash -c "cd changeset-grpc && set -a && source ../.env-dev && set +a && npm run start 2>&1 | tee ../logs/changeset-grpc.log"
+	@screen -dmS transcription-service bash -c "cd transcription-service && source .venv/bin/activate && set -a && source ../.env-dev && set +a && python main.py 2>&1 | tee ../logs/transcription-service.log"
 	@screen -dmS translation-service bash -c "docker compose -f docker-compose-dev.yml up translation-service 2>&1 | tee logs/translation-service.log"
 	@screen -dmS prometheus bash -c "docker compose -f docker-compose-dev.yml up prometheus  2>&1 | tee logs/prometheus.log"
 
-run-dev-docker: install-dev stop-dev-docker
-	@docker compose -f docker-compose-dev.yml --build up -d
+run-dev-docker: generate-env-files install-dev stop
+	@docker compose -f docker-compose-dev.yml up -d --build
 
 stop: stop-dev stop-dev-docker
 	@docker compose down

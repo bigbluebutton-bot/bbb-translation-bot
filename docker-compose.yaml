@@ -23,8 +23,6 @@ services:
       dockerfile: Dockerfile
     networks:
       - bbb-translation-bot
-    # ports:
-    #   - "5051:5051"
 
   transcription-service:
     container_name: transcription-service
@@ -34,8 +32,6 @@ services:
       dockerfile: Dockerfile
     networks:
       - bbb-translation-bot
-    # ports:
-    #   - 8042:8042
     env_file:
       - .env
     volumes:
@@ -54,8 +50,6 @@ services:
     hostname: translation-service
     image: libretranslate/libretranslate:latest-cuda
     restart: unless-stopped
-    # ports:
-    #   - "8000:5000"
     tty: true
     healthcheck:
       test: ['CMD-SHELL', './venv/bin/python scripts/healthcheck.py']     
@@ -77,8 +71,8 @@ services:
     container_name: prometheus
     hostname: prometheus
     restart: always
-    # ports:
-    #   - 1000:9090
+    ports:
+      - 1000:9090
     volumes:
       - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
     networks:

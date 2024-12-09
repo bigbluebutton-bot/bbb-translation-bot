@@ -7,7 +7,7 @@ services:
       context: .
       dockerfile: Dockerfile-bot
     env_file:
-      - .env
+      - .env-dev-docker
     networks:
       - bbb-translation-bot
     depends_on:
@@ -24,7 +24,7 @@ services:
     networks:
       - bbb-translation-bot
     # ports:
-    #   - "5051:5051"
+    #   - "50051:50051"
 
   transcription-service:
     container_name: transcription-service
@@ -37,7 +37,7 @@ services:
     # ports:
     #   - 8042:8042
     env_file:
-      - .env
+      - .env-dev-docker
     volumes:
       - ./.models/whisper:/app/.models
       # - ./logs:/app/logs
