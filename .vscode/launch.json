@@ -9,6 +9,20 @@
             "program": "${workspaceFolder}/bot",
             "env": {},
             "args": []
+        },
+        {
+            "name": "Python: Debug Transcription Service",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/transcription-service/main.py", // Adjust to your entry script
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/transcription-service",
+            "env": {
+                // Add any environment variables needed
+            },
+            "args": [
+                // Add script arguments here if needed
+            ]
         }
     ]
 }
