@@ -761,6 +761,12 @@ exit_with_error() {
     echo -e "\nUse 'tail $LOG_FILE' to view the log file." > /dev/tty
     echo -e "\nScript will end in 10 seconds..." > /dev/tty
     sleep 10
+
+    # Remove LOGIN_HINT_FILE
+    if [ -f "$LOGIN_HINT_FILE" ]; then
+        rm -f "$LOGIN_HINT_FILE"
+    fi
+
     tput cnorm > /dev/tty  # Show cursor
     exit 1
 }
@@ -772,6 +778,13 @@ finalize_task_screen() {
     echo -e "\nUse 'tail $LOG_FILE' to view the log file." > /dev/tty
     echo -e "\nScript will end in 10 seconds..." > /dev/tty
     sleep 10
+
+    # Remove LOGIN_HINT_FILE
+    if [ -f "$LOGIN_HINT_FILE" ]; then
+        rm -f "$LOGIN_HINT_FILE"
+    fi
+
+    tput cnorm > /dev/tty  # Show cursor
 }
 
 # Main task handler
@@ -807,7 +820,7 @@ LINES=(
     "        🖥️  SCREEN SESSION NAME: '$SCREEN_NAME'               "
     "   To monitor the installation progress, please run:          "
     "        📜  sudo su                                           "
-    "        📜  screen -r $SCREEN_NAME                            "
+    "        📜  screen -r -d $SCREEN_NAME                         "
     "   Once completed, a final message will be displayed here.    "
 )
 
