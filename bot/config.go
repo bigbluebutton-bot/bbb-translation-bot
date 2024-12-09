@@ -106,7 +106,7 @@ func LoadSettings() (*Settings, error) {
 	cfg.TranscriptionServer.ExternalHost = mustString("TRANSCRIPTION_SERVER_EXTERNAL_HOST")
 	cfg.TranscriptionServer.PortTCP = mustInt("TRANSCRIPTION_SERVER_PORT_TCP")
 	cfg.TranscriptionServer.Secret = mustString("TRANSCRIPTION_SERVER_SECRET")
-	cfg.TranscriptionServer.HealthCheckPort = mustInt("TRANSCRIPTION_SERVER_HEALTHCHECK_PORT")
+	cfg.TranscriptionServer.HealthCheckPort = mustInt("TRANSCRIPTION_SERVER_HEALTH_CHECK_PORT")
 
 	cfg.TranslationServer.URL = mustString("TRANSLATION_SERVER_URL")
 	cfg.TranslationServer.Secret = mustString("TRANSLATION_SERVER_SECRET")
