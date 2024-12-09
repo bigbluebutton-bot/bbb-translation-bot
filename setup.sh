@@ -636,10 +636,12 @@ export NVM_DIR="$HOME/.nvm"
 #--------------  SCRIPT STUFF: DONT TOUCH!!!  ---------------
 #<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 # Check if a screen session named "install_session" exists
-if screen -list | grep -q $SCREEN_NAME; then
-  echo "⏭️ Screen session '$SCREEN_NAME' is running. Attaching..."
-  screen -r $SCREEN_NAME
-  exit 0
+if ! $STARTED_BY_CRONJOB; then
+    if screen -list | grep -q $SCREEN_NAME; then
+        echo "⏭️ Screen session '$SCREEN_NAME' is running. Attaching..."
+        screen -r -d $SCREEN_NAME
+        exit 0
+    fi
 fi
 
 
