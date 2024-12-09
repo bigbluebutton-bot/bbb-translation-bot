@@ -1,131 +1,219 @@
-# BBB-Translation-Bot
+# 🚀 BBB-Translation-Bot
 
-BBB-Translation-Bot is a tool designed to enhance communication in BigBlueButton (BBB) meetings by providing real-time transcription and translation services. Utilizing OpenAI's cutting-edge [Whisper](https://github.com/openai/whisper) technology, the bot joins a BBB meeting's audio channel and transcribes/translates spoken words into text, seamlessly integrating the transcripts into BBB's closed captions feature.
+**BBB-Translation-Bot** enhances communication in [BigBlueButton (BBB)](https://bigbluebutton.org/) meetings by providing real-time transcription and translation services. Using OpenAI's [Whisper](https://github.com/openai/whisper) AI, the bot joins a BBB meeting's audio channel to transcribe and translate spoken words into text, seamlessly integrating the transcripts into BBB's closed captions feature. 📝🌐
 
-# Getting Started
+---
 
-First of all you need the right Haardware. Im using a [NVIDIA RTX4090](https://www.nvidia.com/de-de/geforce/graphics-cards/40-series/rtx-4090/). Where I get a stable transcription speed of 2,1 seconds in english with the large-v3 version of Whisper. And thats it. Now lets staart with the softwaare part. Dont worry. I will go through the whole process stepo by step. Also you dont have to install any drivers. I will show you how to do this. You just need a fresh installation of Ubuntu22 and root access. And dont be to ambitious and clone this project in advance. We will do this together. Just keep reading and dont skip any steps.
+## 🛠️ Getting Started
 
-For both parth I recomend using [Ubuntu22](https://releases.ubuntu.com/jammy/). At the moment Im using Faster Whisper which needs cuDNN 8.x. And this is only supported on Ubuntu22. I also recomend using Proxmox to setup a virtual mashin with ubuntu22. Im showing you how to to this with GPU pathtrough on this README-proxmox.md
+### 📋 Prerequisites
 
-You now have to options. You can get this up and running using docker, or setup an dev environment and run it with docker or normal in multiple screen seasions.
+Before you begin, ensure you have the following:
 
-There are two ways in getting started. If you just want to get this project up and running continue reading here.
-If you want to setup aa developer environment continue reaading here.
+- **Hardware:**
+  - **GPU:** NVIDIA RTX 4090 ([More Info](https://www.nvidia.com/de-de/geforce/graphics-cards/40-series/rtx-4090/)) for stable transcription speeds (~2.1 seconds per English transcription with Whisper large-v3).
+  - **Storage:** Minimum 64GB HDD (more recommended for active development as Docker can consume significant disk space).
 
-## Simple setup (no dev!!!)
+- **Software:**
+  - **Operating System:** Fresh installation of [Ubuntu 22.04](https://releases.ubuntu.com/jammy/) 🐧
+  - **Access:** Root access to your machine.
 
-I have provided a makefile to make the setup process easier. You can run the following commands to get the project up and running.
+> **Pro Tip:** Consider using [Proxmox](https://www.proxmox.com/) to set up a virtual machine with Ubuntu 22 and enable GPU passthrough. For detailed instructions, check out [README-proxmox.md](README-proxmox.md).
 
-```bash
-git clone https://github.com/bigbluebutton-bot/bbb-translation-bot
-cd bbb-translation-bot
-sudo make simple-setup
-```
+### 📥 Clone the Repository
 
-This will do the following:
-- Update System Packages
-- Install nvidia drivers
-- Reboot the system
-- Install docker
-- Install docker with nvidia support
+Don't clone the project in advance. Follow the steps below to set everything up together. 😊
 
-The script will reboot the system. Dont worry. It will automaticly continue after the reboot. To see the status of the script after the reboot you can run the following command:
+---
 
-```bash
-sudo su
-screen -r 
-```
+## 🔧 Installation
 
-If the setup script is completed you can run the following command to start the bot:
+You have two options to set up BBB-Translation-Bot:
 
-```bash
-make start
-```
+1. **Simple Setup**: Quick setup using Docker.
+2. **Developer Setup**: Set up a development environment for contributing or customizing.
 
-Because this will be the first time starting the bot it will detect, there is no '.env' file. So it will ask you some questions to be able to connect to your BigBlueButton server. You will need the domain and the BBB sectet. To get the secret ssh into you BBB server and run:
-    
+Choose the one that fits your needs:
+
+- **For Users**: [Simple Setup](#simple-setup-no-dev)
+- **For Developers**: [Developer Setup](#developer-setup)
+
+---
+
+### 🚀 Simple Setup (No Development)
+
+Follow these steps to get BBB-Translation-Bot up and running quickly using Docker:
+
+1. **Clone the Repository:**
+
     ```bash
-    sudo bbb-conf --secret
+    git clone https://github.com/bigbluebutton-bot/bbb-translation-bot
+    cd bbb-translation-bot
     ```
 
-## Developer setup
+2. **Run the Makefile:**
 
-If you want to develop on Windows WSL. This is ppossible. Continue reading at the WSL section.
+    ```bash
+    make run
+    ```
 
-If you want to setup a developer environment you can run the following commands:
+    This will:
 
-```bash
-git clone --recurse-submodules -j8 https://github.com/bigbluebutton-bot/bbb-translation-bot
-cd bbb-translation-bot
-sudo make dev-setup
-```
+    - Update system packages 🛠️
+    - Install NVIDIA drivers 🖥️
+    - Reboot the system 🔄
+    - Install Docker 🐳
+    - Set up Docker with NVIDIA support
 
-This will do the following:
-- Update System Packages
-- Install NVIDIA Drivers
-- Install NVIDIA CUDA
-- Reboot
-- Install NVIDIA cuDNN 8.9.7
-- Install Docker
-- Install golang
-- Install python3
-
-The script will reboot the system. Dont worry. It will automaticly continue after the reboot. To see the status of the script after the reboot you can run the following command:
+> **Note:** The system will reboot automatically. After reboot, the script continues running. To check the status after reboot, run:
 
 ```bash
-sudo su
-screen -r 
+make run
 ```
 
+3. **Configure the Bot:**
 
+    On the first run, the bot will prompt you to create a `.env` file with your BBB server details:
 
+    - **Domain**: Your BBB server's domain.
+    - **BBB Secret**: Retrieve it by SSH into your BBB server and running:
 
-## WSL
+        ```bash
+        sudo bbb-conf --secret
+        ```
 
-If you want to develop on Windows WSL. This is possible. You can follow the following steps to get the project up and running.
+---
 
-1. Install your [NVIDIA drivers](https://www.nvidia.com/en-us/drivers/) on your Windows machine. Accouding to this [article](https://docs.nvidia.com/cuda/wsl-user-guide/index.html#getting-started-with-cuda-on-wsl) WSL 2 should then have access to the drivers.
-2. Install WSL2. Fo that open PowerShell as an administrator and run the following command:
+### 💻 Developer Setup
+
+If you plan to contribute or customize BBB-Translation-Bot, set up a development environment:
+
+1. **Clone the Repository with Submodules:**
+
+    ```bash
+    git clone --recurse-submodules -j8 https://github.com/bigbluebutton-bot/bbb-translation-bot
+    cd bbb-translation-bot
+    ```
+
+2. **Run the Development Makefile:**
+
+    ```bash
+    make run-dev
+    ```
+
+    This will:
+
+    - Update system packages 🛠️
+    - Install NVIDIA Drivers and CUDA 🖥️💾
+    - Reboot the system 🔄
+    - Install NVIDIA cuDNN 8.9.7 📚
+    - Install Docker 🐳
+    - Install GoLang 🛠️
+    - Install Python 3 🐍
+
+> **Note:** After reboot, continue the setup by running:
+
+```bash
+make run-dev
+```
+
+---
+
+## 🪟 Windows WSL Setup
+
+You can also develop on Windows using WSL2. Follow these steps:
+
+1. **Install NVIDIA Drivers on Windows:**
+
+    Download and install from [NVIDIA Drivers](https://www.nvidia.com/en-us/drivers/). According to the [WSL CUDA Guide](https://docs.nvidia.com/cuda/wsl-user-guide/index.html#getting-started-with-cuda-on-wsl), WSL2 will access these drivers.
+
+2. **Install WSL2:**
+
+    Open PowerShell as an administrator and run:
 
     ```bash
     wsl --install
     ```
 
-3. Install Ubuntu22. You can do this by opening the [Microsoft Store](https://apps.microsoft.com/detail/9pn20msr04dw) and searching for Ubuntu22. Click on install and wait for the installation to complete.
-4. Go and downloade docker desktop from the [docker website](https://www.docker.com/products/docker-desktop). Install it and make sure to enable the WSL2 integration. Now open the Ubuntu22 terminal and try running the `docker` command.
+3. **Install Ubuntu 22.04:**
 
-<details>
-  <summary>Fix for error: `The command 'docker' could not be found in this WSL 2 distro.`</summary>
-    If you get an error like this:
+    - Open the [Microsoft Store](https://apps.microsoft.com/detail/9pn20msr04dw).
+    - Search for **Ubuntu 22.04**.
+    - Click **Install** and wait for the installation to complete.
+
+4. **Install Docker Desktop:**
+
+    - Download from [Docker Desktop](https://www.docker.com/products/docker-desktop).
+    - Install and enable WSL2 integration.
+    - Open the Ubuntu 22.04 terminal and verify Docker by running:
 
     ```bash
-    $ docker
-
-    The command 'docker' could not be found in this WSL 2 distro.
-    We recommend to activate the WSL integration in Docker Desktop settings.
-
-    For details about using Docker Desktop with WSL 2, visit:
-
-    https://docs.docker.com/go/wsl2/
+    docker
     ```
 
-    Open docker desktop and go to settings. Then go to the resources tab and click on WSL integration. Enable the integration for Ubuntu22.
-    ![docker-settings](docs/imgs/enable-docker-in-wsl.png)
+    **🔧 Fix Docker Command Not Found Error:**
 
-    Thanks to this [post](https://stackoverflow.com/questions/63497928/ubuntu-wsl-with-docker-could-not-be-found).
-</details>
+    <details>
+      <summary>Click to expand</summary>
 
+      If you encounter:
 
-5. Open the Ubuntu22 terminal and run the following command to update the system:
+      ```bash
+      $ docker
+      The command 'docker' could not be found in this WSL 2 distro.
+      We recommend activating WSL integration in Docker Desktop settings.
+
+      For details, visit:
+      https://docs.docker.com/go/wsl2/
+      ```
+
+      **Solution:**
+
+      - Open Docker Desktop.
+      - Go to **Settings** > **Resources** > **WSL Integration**.
+      - Enable integration for **Ubuntu22**.
+
+      ![Enable Docker in WSL](docs/imgs/enable-docker-in-wsl.png)
+
+      *Thanks to [this post](https://stackoverflow.com/questions/63497928/ubuntu-wsl-with-docker-could-not-be-found) for the solution.*
+    </details>
+
+5. **Clone and Run the Bot:**
+
+    In the Ubuntu 22.04 terminal, execute:
 
     ```bash
-    git clone --recurse-submodules -j8 https://github.com/bigbluebutton-bot/bbb-translation-bot
+    git clone https://github.com/bigbluebutton-bot/bbb-translation-bot
     cd bbb-translation-bot
-    sudo make dev-setup-wsl
-
-
-    sudo apt install nvidia-cuda-dev -y
-    sudo apt install nvidia-cuda-toolkit -y
-
+    make run-dev
     ```
+
+---
+
+## 📚 Additional Resources
+
+- **Proxmox GPU Passthrough Setup:** [README-proxmox.md](README-proxmox.md)
+- **Whisper by OpenAI:** [GitHub Repository](https://github.com/openai/whisper)
+- **BigBlueButton:** [Official Website](https://bigbluebutton.org/)
+
+---
+
+## 🙏 Contributing
+
+We welcome contributions! Whether it's reporting issues, suggesting features, or submitting pull requests, your help is greatly appreciated. 🤝
+
+---
+
+## 📝 License
+
+This project is licensed under the [MIT License](LICENSE).
+
+---
+
+## 📫 Contact
+
+For any questions or support, feel free to [open an issue](https://github.com/bigbluebutton-bot/bbb-translation-bot/issues) on GitHub.
+
+---
+
+✨ **Enhance your BBB meetings with real-time transcription and translation!** ✨
