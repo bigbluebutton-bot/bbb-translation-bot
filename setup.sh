@@ -10,8 +10,8 @@ main() {
         add_task "Install NVIDIA Drivers" nvidia_install check_nvidia_driver  # Skip if drivers are installed
         add_task "Install NVIDIA CUDA" cuda_install check_cuda_installed  # Skip if CUDA is installed
         add_task "Install NVIDIA CUDA Toolkit" cuda_toolkit check_toolkit  # Skip if toolkit is installed
-        add_task "Reboot" configure_reboot_ubuntu22 check_reboot_configured_ubuntu22  # Skip if reboot is needed
         add_task "Install NVIDIA cuDNN 8.9.7" install_cudnn check_cudnn_installed  # Skip if cuDNN is installed
+        add_task "Reboot" configure_reboot_ubuntu22 check_reboot_configured_ubuntu22  # Skip if reboot is needed
         add_task "Install Docker" install_docker check_docker_installed  # Skip if Docker is installed
         add_task "Install Docker with NVIDIA support" install_docker_nvidia check_docker_nvidia  # Skip if Docker with NVIDIA support is installed
         add_task "Install ffmpeg" install_ffmpeg check_ffmpeg_installed  # Skip if ffmpeg is installed
@@ -82,7 +82,6 @@ show_help() {
     echo ""
     echo "Options:"
     # echo "  --cron         Indicate the script was started by a cronjob"
-    # echo "  --path         Specify the folder path (required with --cron)"
     # echo "  --user         Specify the user (required with --cron)"
     echo "  --simple-setup Perform a simple setup"
     echo "  --ubuntu22     Install on Ubuntu 22.04"
@@ -120,14 +119,6 @@ while [[ "$1" != "" ]]; do
             fi
             USER="$1"
             ;;
-        --path)
-            shift
-            if [ -z "$1" ] || [[ "$1" == -* ]]; then
-                echo "Error: --path requires a valid folder path"
-                exit 1
-            fi
-            PATH_TO_FOLDER="$1"
-            ;;
         --check)
             CHECK_DEPENDENCIES=true
             ;;
@@ -160,14 +151,12 @@ fi
 
 # Validate required options for --cron
 if [ "$STARTED_BY_CRONJOB" = true ]; then
-    if [ -z "$PATH_TO_FOLDER" ]; then
-        echo "Error: --cron requires --path to be set."
-        exit 1
-    fi
     if [ -z "$USER" ]; then
         echo "Error: --cron requires --user to be set."
         exit 1
     fi
+
+    SUDO_USER=$USER
 fi
 
 
@@ -798,7 +787,7 @@ ORGINAL_USER=$SUDO_USER
 # Function to configure the system to reboot
 reboot_now() {
     if ! grep -Fq "$FULL_PATH_OF_THIS_SCRIPT" /etc/crontab; then
-        echo "@reboot root /usr/bin/screen -dmS $SCREEN_NAME /bin/bash $FULL_PATH_OF_THIS_SCRIPT --cron $REBOOT_OPTIONS --path $SCRIPT_DIR --user $ORGINAL_USER" >> /etc/crontab
+        echo "@reboot root /usr/bin/screen -dmS $SCREEN_NAME /bin/bash $FULL_PATH_OF_THIS_SCRIPT --cron $REBOOT_OPTIONS --user $ORGINAL_USER" >> /etc/crontab
     fi
 
     # Add a login hint
@@ -889,6 +878,7 @@ echo "╝"
 EOF
 
     chmod +x "$LOGIN_HINT_FILE"
+    sleep 5
     reboot now
 }
 
