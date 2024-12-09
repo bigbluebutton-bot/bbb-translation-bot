@@ -22,7 +22,14 @@ endif
 	@echo "All dependencies are installed"
 
 build:
-build:
+	@if [ ! "$$(ls -A transcription-service)" ]; then \
+		git submodule update --init --recursive; \
+	fi
+	@if [ ! "$$(ls -A changeset-grpc)" ]; then \
+		git submodule update --init --recursive; \
+	fi
+
+
 	@cd bot && go mod tidy
 	@cd changeset-grpc && if [ ! -d "node_modules" ]; then npm install; fi
 
