@@ -27,13 +27,13 @@ build:
 	fi
 	@if [ ! "$$(ls -A changeset-grpc)" ]; then \
 		git submodule update --init --recursive; \
+		cd changeset-grpc/etherpad-lite; \
+		src/bin/installDeps.sh; \
+		cd ..; \
+		npm install; \
 	fi
 
-
 	@cd bot && go mod tidy
-	@cd changeset-grpc && if [ ! -d "node_modules" ]; then npm install; fi
-
-	@cd changeset-grpc/etherpad-lite && if [ ! -d "node_modules" ]; then src/bin/installDeps.sh; fi
 	
 	@cd transcription-service && if [ ! -d ".venv" ]; then \
 		python3 -m venv .venv && \
