@@ -54,6 +54,7 @@ run: generate-env-files install stop
 	@docker compose up -d
 
 run-dev: generate-env-files install-dev stop build
+	@docker compose -f docker-compose-dev.yml up --no-start
 	@screen -dmS bot bash -c "cd bot && set -a && source ../.env-dev && set +a && go run . 2>&1 | tee ../logs/bot.log"
 	@screen -dmS changeset-grpc bash -c "cd changeset-grpc && set -a && source ../.env-dev && set +a && npm run start 2>&1 | tee ../logs/changeset-grpc.log"
 	@screen -dmS transcription-service bash -c "cd transcription-service && source .venv/bin/activate && set -a && source ../.env-dev && set +a && python main.py 2>&1 | tee ../logs/transcription-service.log"
