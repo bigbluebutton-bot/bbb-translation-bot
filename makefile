@@ -24,6 +24,10 @@ endif
 build:
 	@if [ ! "$$(ls -A transcription-service)" ]; then \
 		git submodule update --init --recursive; \
+		cd changeset-grpc/etherpad-lite; \
+		src/bin/installDeps.sh; \
+		cd ..; \
+		npm install; \
 	fi
 	@if [ ! "$$(ls -A changeset-grpc)" ]; then \
 		git submodule update --init --recursive; \
