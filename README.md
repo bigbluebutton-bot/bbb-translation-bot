@@ -91,7 +91,7 @@ If you plan to contribute or customize BBB-Translation-Bot, set up a development
 1. **Clone the Repository with Submodules:**
 
     ```bash
-    git clone --recurse-submodules -j8 https://github.com/bigbluebutton-bot/bbb-translation-bot
+    git clone https://github.com/bigbluebutton-bot/bbb-translation-bot
     cd bbb-translation-bot
     ```
 
