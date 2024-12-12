@@ -6,7 +6,6 @@ LOGIN_HINT_FILE="/etc/profile.d/install_hint.sh"
 # Main execution: Define tasks and run the main function
 main() {
     if $INSTALL_ON_UBUNTU22; then
-        add_task "Update System Packages" update ""  # No skip function
         add_task "Install NVIDIA Drivers" nvidia_install check_nvidia_driver  # Skip if drivers are installed
         add_task "Install NVIDIA CUDA" cuda_install check_cuda_installed  # Skip if CUDA is installed
         add_task "Install NVIDIA CUDA Toolkit" cuda_toolkit check_toolkit  # Skip if toolkit is installed
@@ -19,7 +18,6 @@ main() {
         add_task "Install python3" install_python3 check_python3_installed  # Skip if python3 is installed
         add_task "Install nodejs" install_nodejs check_nodejs_installed  # Skip if nodejs is installed
     elif $INSTALL_SIMPLE_SETUP; then
-        add_task "Update System Packages" update ""  # No skip function
         add_task "Install NVIDIA Drivers" nvidia_install check_nvidia_driver  # Skip if drivers are installed
         add_task "Install NVIDIA CUDA" cuda_install check_cuda_installed  # Skip if CUDA is installed
         add_task "Install NVIDIA CUDA Toolkit" cuda_toolkit check_toolkit  # Skip if toolkit is installed
@@ -27,7 +25,6 @@ main() {
         add_task "Install Docker" install_docker check_docker_installed  # Skip if Docker is installed
         add_task "Install Docker with NVIDIA support" install_docker_nvidia check_docker_nvidia  # Skip if Docker with NVIDIA support is installed
     elif $INSTALL_ON_WSL; then
-        add_task "Update System Packages" update ""  # No skip function
         add_task "Install NVIDIA CUDA Toolkit" cuda_toolkit check_toolkit  # Skip if toolkit is installed
         add_task "Install NVIDIA cuDNN 8.9.7" install_cudnn check_cudnn_installed  # Skip if cuDNN is installed
         add_task "Install ffmpeg" install_ffmpeg check_ffmpeg_installed  # Skip if ffmpeg is installed
@@ -215,14 +212,7 @@ configure_reboot_simple() {
 #<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 #------------------------------------------------------------
-# 1. Update System Packages
-update() {
-    apt update
-}
-#------------------------------------------------------------
-
-#------------------------------------------------------------
-# 2. Install NVIDIA Drivers
+# 1. Install NVIDIA Drivers
 check_nvidia_driver() {
     if command -v nvidia-smi &> /dev/null; then
         return 0  # Step is completed
@@ -238,7 +228,7 @@ nvidia_install() {
 #------------------------------------------------------------
 
 #------------------------------------------------------------
-# 3. Install CUDA 12
+# 2. Install CUDA 12
 check_cuda_installed() {
     if command -v nvcc &> /dev/null; then
         return 0  # Skip task
@@ -294,7 +284,7 @@ cuda_install() {
 #------------------------------------------------------------
 
 #------------------------------------------------------------
-# 4. Install NVIDIA CUDA Toolkit
+# 3. Install NVIDIA CUDA Toolkit
 check_toolkit() {
     if dpkg -l | grep -qw nvidia-cuda-toolkit; then
         return 0
@@ -309,7 +299,7 @@ cuda_toolkit() {
 #------------------------------------------------------------
 
 #------------------------------------------------------------
-# 5. Configure Reboot
+# 4. Configure Reboot
 check_reboot_configured_ubuntu22() {
     # if STARTED_BY_CRONJOB is true, then skip this task
     if [ "$STARTED_BY_CRONJOB" = true ]; then
@@ -331,7 +321,7 @@ configure_reboot_ubuntu22() {
 #------------------------------------------------------------
 
 #------------------------------------------------------------
-# 6. Install cuDNN 8.9.7
+# 5. Install cuDNN 8.9.7
 check_cudnn_installed() {
     if dpkg -l | grep -qw libcudnn8; then
         return 0
@@ -389,7 +379,7 @@ install_cudnn() {
 #------------------------------------------------------------
 
 #------------------------------------------------------------
-# 7. Install Docker
+# 6. Install Docker
 check_docker_installed() {
     if command -v docker &> /dev/null; then
         return 0
@@ -404,7 +394,7 @@ install_docker() {
 #------------------------------------------------------------
 
 #------------------------------------------------------------
-# 8. Install docker with NVIDIA support
+# 7. Install docker with NVIDIA support
 check_docker_nvidia() {
     if dpkg -l | grep -qw nvidia-container-runtime; then
         return 0
@@ -426,7 +416,7 @@ install_docker_nvidia() {
 #------------------------------------------------------------
 
 #------------------------------------------------------------
-# 9. Install ffmpeg
+# 8. Install ffmpeg
 check_ffmpeg_installed() {
     if command -v ffmpeg &> /dev/null; then
         return 0
@@ -442,7 +432,7 @@ install_ffmpeg() {
 #------------------------------------------------------------
 
 #------------------------------------------------------------
-# 10. Install golang
+# 9. Install golang
 check_golang_installed() {
     # Check if newer version of Go is available
     go_version=$(curl -s https://go.dev/VERSION?m=text | head -n 1 | sed 's/^go//')
@@ -507,7 +497,7 @@ install_golang() {
 #------------------------------------------------------------
 
 #------------------------------------------------------------
-# 11. Install python3
+# 10. Install python3
 check_python3_installed() {
     if command -v python3 &> /dev/null; then
         echo "Python 3 is installed."
@@ -548,7 +538,7 @@ install_python3() {
 #------------------------------------------------------------
 
 #------------------------------------------------------------
-# 12. Install nodejs
+# 11. Install nodejs
 check_nodejs_installed() {
     if [ -z "$SUDO_USER" ]; then
         SUDO_USER=$(whoami)
@@ -897,6 +887,30 @@ EOF
     reboot now
 }
 
+
+#------------------------------------------------------------
+# 0. Update System Packages
+update() {
+    apt update
+}
+#------------------------------------------------------------
+
+#------------------------------------------------------------
+# 0. Install nessecary packages
+check_nessecary_packages_installed() {
+    if dpkg -l | grep -qw wget && dpkg -l | grep -qw curl && dpkg -l | grep -qw dpkg && dpkg -l | grep -qw screen && dpkg -l | grep -qw make && dpkg -l | grep -qw grep; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+install_nessecary_packages() {
+    apt install wget curl dpkg screen make grep -y
+}
+
+#------------------------------------------------------------
+
 if [ "$CHECK_DEPENDENCIES" = true ]; then
     check_dependencies
     exit 0
@@ -904,6 +918,9 @@ fi
 
 # Check for root access
 check_root
+
+add_task "Update System Packages" update ""  # No skip function
+add_task "Install nessecary packages" install_nessecary_packages check_nessecary_packages_installed  # Skip if drivers are installed
 
 # Run the main function
 main
