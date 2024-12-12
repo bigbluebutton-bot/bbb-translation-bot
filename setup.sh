@@ -338,27 +338,30 @@ install_cudnn() {
     echo -e "\e[1;33mNVIDIA has restricted direct downloads of libcudnn packages.\e[0m" > /dev/tty
     echo -e "\e[1;33mPlease follow the steps below:\e[0m" > /dev/tty
     echo -e "\e[1;32m1. Visit: \e[1;34mhttps://developer.nvidia.com/rdp/cudnn-archive\e[0m" > /dev/tty
-    echo -e "\e[1;32m2. Download: \e[1;34mLocal Installer for Ubuntu 22.04 x86_64 (Deb)\e[0m" > /dev/tty
-    echo -e "\e[1;32m3. Save the file in this directory as: \e[1;34mcudnn-local-repo-ubuntu2204-8.9.7.29_1.0-1_amd64.deb\e[0m" > /dev/tty
-    echo -e "\e[1;33mThe script will continue automatically once the file is detected.\e[0m" > /dev/tty
+    echo -e "\e[1;32m2. Download the appropriate installer for your system.\e[0m" > /dev/tty
+    echo -e "\e[1;34m  (Download cuDNN v8.9.7 (December 5th, 2023), for CUDA 12.x)\e[0m" > /dev/tty
+    echo -e "\e[1;32m3. Place the downloaded file in this directory.\e[0m" > /dev/tty
+    echo -e "\e[1;34m  (Filename: cudnn*.deb)\e[0m" > /dev/tty
+    echo -e "\e[1;33mThe script will continue automatically once the correct file is detected.\e[0m" > /dev/tty
     echo -e "\e[1;31m================================================================================\e[0m" > /dev/tty
 
-    # Full-screen effect (clears the screen)
-    echo -e "\e[1;33mWaiting for cudnn-local-repo-ubuntu2204-8.9.7.29_1.0-1_amd64.deb to be saved in the current directory...\e[0m" > /dev/tty
+    echo -e "\e[1;33mWaiting for a valid cudnn installer file to be saved in the current directory...\e[0m" > /dev/tty
 
-    # Wait for the file to appear
+    # Wait for a valid file to appear
     while true; do
-        if [ -f "cudnn-local-repo-ubuntu2204-8.9.7.29_1.0-1_amd64.deb" ]; then
+        # Look for any file starting with 'cudnn' and ending with '.deb'
+        file=$(ls cudnn*.deb 2>/dev/null | head -n 1)
+        if [ -n "$file" ]; then
             # File exists, now check for stability
-            previous_size=$(stat -c%s "cudnn-local-repo-ubuntu2204-8.9.7.29_1.0-1_amd64.deb")
+            previous_size=$(stat -c%s "$file")
             sleep 5
-            current_size=$(stat -c%s "cudnn-local-repo-ubuntu2204-8.9.7.29_1.0-1_amd64.deb")
-            
+            current_size=$(stat -c%s "$file")
+
             if [ "$previous_size" -eq "$current_size" ]; then
-                echo -e "\e[1;32mFile detected and is stable. Proceeding with the installation...\e[0m" > /dev/tty
+                echo -e "\e[1;32mFile detected and is stable: $file. Proceeding with the installation...\e[0m" > /dev/tty
                 break
             else
-                echo -e "\e[1;33mcudnn-local-repo-ubuntu2204-8.9.7.29_1.0-1_amd64.deb was detected, but is still being downloaded...\e[0m" > /dev/tty
+                echo -e "\e[1;33m$file was detected, but is still being downloaded...\e[0m" > /dev/tty
             fi
         fi
         sleep 5
@@ -369,9 +372,8 @@ install_cudnn() {
     tput clear > /dev/tty
     update_task_status
 
-
-    # Proceed with installation
-    dpkg -i cudnn-local-repo-ubuntu2204-8.9.7.29_1.0-1_amd64.deb
+    # Proceed with installation of the deb file
+    dpkg -i "$file"
     cp /var/cudnn-local-repo-*/cudnn-local-*-keyring.gpg /usr/share/keyrings/
     apt-get update
     apt-get install -y libcudnn8 libcudnn8-dev
