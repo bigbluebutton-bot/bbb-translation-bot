@@ -11,18 +11,20 @@
 Before you begin, ensure you have the following:
 
 - **Hardware:**
-  - **GPU:** NVIDIA RTX 4090 ([More Info](https://www.nvidia.com/de-de/geforce/graphics-cards/40-series/rtx-4090/)) for stable transcription speeds (~2.1 seconds per English transcription with Whisper large-v3).
-  - **Storage:** Minimum 64GB HDD (more recommended for active development as Docker can consume significant disk space).
+  - **GPU:** NVIDIA GPU. Im using a NVIDIA RTX 4090 ([More Info](https://www.nvidia.com/de-de/geforce/graphics-cards/40-series/rtx-4090/)) for stable transcription speed of ~2.1 seconds with Whisper large. If you are using a less powerful GPU, consider using a smaller model like Whisper base.
+  - **Storage:** Minimum 64GB disk space (more recommended for active development as Docker can consume significant disk space).
 
 - **Software:**
-  - **Operating System:** Fresh installation of [Ubuntu 22.04](https://releases.ubuntu.com/jammy/) 🐧
+  - **Operating System:**
+    - [Ubuntu 22.04](https://releases.ubuntu.com/jammy/)
+    - Windows: [WSL2](https://docs.microsoft.com/en-us/windows/wsl/install) with Ubuntu 22.04.
   - **Access:** Root access to your machine.
 
-> **Pro Tip:** Consider using [Proxmox](https://www.proxmox.com/) to set up a virtual machine with Ubuntu 22 and enable GPU passthrough. For detailed instructions, check out [README-proxmox.md](README-proxmox.md).
+> **Pro Tip:** Consider using [Proxmox](https://www.proxmox.com/) to set up a virtual machine with Ubuntu 22 and enable GPU passthrough.
 
 ### 📥 Clone the Repository
 
-Don't clone the project in advance. Follow the steps below to set everything up together. 😊
+DONT clone the project in advance. The script depends on empty sub repositories and will clone them during the setup process. So pls DONT clone this repo in advance and follow the instructions below. 
 
 ---
 
@@ -47,6 +49,7 @@ Follow these steps to get BBB-Translation-Bot up and running quickly using Docke
 1. **Clone the Repository:**
 
     ```bash
+    sudo apt update && sudo apt install make -y
     git clone https://github.com/bigbluebutton-bot/bbb-translation-bot
     cd bbb-translation-bot
     ```
@@ -57,19 +60,11 @@ Follow these steps to get BBB-Translation-Bot up and running quickly using Docke
     make run
     ```
 
-    This will:
+    > **Note:** The system will reboot automatically. After reboot, the script continues running. To check the status after reboot, run:
 
-    - Update system packages 🛠️
-    - Install NVIDIA drivers 🖥️
-    - Reboot the system 🔄
-    - Install Docker 🐳
-    - Set up Docker with NVIDIA support
-
-> **Note:** The system will reboot automatically. After reboot, the script continues running. To check the status after reboot, run:
-
-```bash
-make run
-```
+    ```bash
+    make run
+    ```
 
 3. **Configure the Bot:**
 
@@ -81,6 +76,20 @@ make run
         ```bash
         sudo bbb-conf --secret
         ```
+4. **Logs:**
+
+    To view the logs, run:
+
+    ```bash
+    docker-compose logs -f
+    ```
+5. **Stop the Bot:**
+
+    To stop the bot, run:
+
+    ```bash
+    make stop
+    ```
 
 ---
 
@@ -91,6 +100,7 @@ If you plan to contribute or customize BBB-Translation-Bot, set up a development
 1. **Clone the Repository with Submodules:**
 
     ```bash
+    sudo apt update && apt install make git -y
     git clone https://github.com/bigbluebutton-bot/bbb-translation-bot
     cd bbb-translation-bot
     ```
@@ -101,21 +111,42 @@ If you plan to contribute or customize BBB-Translation-Bot, set up a development
     make run-dev
     ```
 
-    This will:
+    > **Note:** The system will reboot automatically. After reboot, the script continues running. To check the status after reboot, run:
 
-    - Update system packages 🛠️
-    - Install NVIDIA Drivers and CUDA 🖥️💾
-    - Reboot the system 🔄
-    - Install NVIDIA cuDNN 8.9.7 📚
-    - Install Docker 🐳
-    - Install GoLang 🛠️
-    - Install Python 3 🐍
+    ```bash
+    make run-dev
+    ```
 
-> **Note:** After reboot, continue the setup by running:
+3. **Configure the Bot:**
 
-```bash
-make run-dev
-```
+    On the first run, the bot will prompt you to create a `.env-dev` and `.env-dev-docker` file with your BBB server details:
+
+    - **Domain**: Your BBB server's domain.
+    - **BBB Secret**: Retrieve it by SSH into your BBB server and running:
+
+        ```bash
+        sudo bbb-conf --secret
+        ```
+
+4. **Logs:**
+
+    To view the logs, run:
+
+    ```bash
+    tail -f logs/bot.log
+    tail -f logs/changeset-grpc.log
+    tail -f logs/prometheus.log
+    tail -f logs/transcription-service.log
+    tail -f logs/translation-service.log
+    ```
+
+5. **Stop the Bot:**
+
+    To stop the bot, run:
+
+    ```bash
+    make stop
+    ```
 
 ---
 
@@ -154,7 +185,7 @@ You can also develop on Windows using WSL2. Follow these steps:
     **🔧 Fix Docker Command Not Found Error:**
 
     <details>
-      <summary>Click to expand</summary>
+      <summary>Solution: --> Click to expand <--</summary>
 
       If you encounter:
 
@@ -183,18 +214,54 @@ You can also develop on Windows using WSL2. Follow these steps:
     In the Ubuntu 22.04 terminal, execute:
 
     ```bash
+    sudo apt update && apt install make git -y
     git clone https://github.com/bigbluebutton-bot/bbb-translation-bot
     cd bbb-translation-bot
     make run-dev
+    ```
+
+6. **Configure the Bot:**
+
+    On the first run, the bot will prompt you to create a `.env-dev` and `.env-dev-docker` file with your BBB server details:
+
+    - **Domain**: Your BBB server's domain.
+    - **BBB Secret**: Retrieve it by SSH into your BBB server and running:
+
+        ```bash
+        sudo bbb-conf --secret
+        ```
+
+7. **Logs:**
+
+    To view the logs, run:
+
+    ```bash
+    tail -f logs/bot.log
+    tail -f logs/changeset-grpc.log
+    tail -f logs/prometheus.log
+    tail -f logs/transcription-service.log
+    tail -f logs/translation-service.log
+    ```
+8. **Stop the Bot:**
+
+    To stop the bot, run:
+
+    ```bash
+    make stop
     ```
 
 ---
 
 ## 📚 Additional Resources
 
-- **Proxmox GPU Passthrough Setup:** [README-proxmox.md](README-proxmox.md)
-- **Whisper by OpenAI:** [GitHub Repository](https://github.com/openai/whisper)
 - **BigBlueButton:** [Official Website](https://bigbluebutton.org/)
+- **Whisper by OpenAI:** [GitHub Repository](https://github.com/openai/whisper)
+- **faster-whisper:** [GitHub Repository](https://github.com/SYSTRAN/faster-whisper)
+- **bigbluebutton-bot:** [GitHub Repository](https://github.com/bigbluebutton-bot/bigbluebutton-bot)
+- **transcription-service**: [GitHub Repository](https://github.com/bigbluebutton-bot/transcription-service)
+- **stream_pipeline:** [GitHub Repository](https://github.com/bigbluebutton-bot/stream_pipeline)
+- **changeset-grpc:** [GitHub Repository](https://github.com/bigbluebutton-bot/changeset-grpc)
+- **LibreTranslate:** [GitHub Repository](https://github.com/LibreTranslate/LibreTranslate)
 
 ---
 
@@ -215,5 +282,3 @@ This project is licensed under the [MIT License](LICENSE).
 For any questions or support, feel free to [open an issue](https://github.com/bigbluebutton-bot/bbb-translation-bot/issues) on GitHub.
 
 ---
-
-✨ **Enhance your BBB meetings with real-time transcription and translation!** ✨
