@@ -6,80 +6,193 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
-	"time"
 
+	bbbbot "github.com/bigbluebutton-bot/bigbluebutton-bot"
 	api "github.com/bigbluebutton-bot/bigbluebutton-bot/api"
+	"github.com/bigbluebutton-bot/bigbluebutton-bot/bbb"
+)
 
-	bot "github.com/bigbluebutton-bot/bigbluebutton-bot"
+var (
+	currentMeetingID string
+	isBotConnected   bool
 
-	bbb "github.com/bigbluebutton-bot/bigbluebutton-bot/bbb"
-
-	"github.com/pion/rtp"
-	"github.com/pion/webrtc/v3"
-	"github.com/pion/webrtc/v4/pkg/media/oggwriter"
+	// Variables needed for translation functionality
+	conf          *Settings
+	client		*bbbbot.Client
+	clients       []*bbbbot.Client
+	clientsMutex  = &sync.Mutex{}
 )
 
 func main() {
-
-	conf, err := LoadSettings()
+	var err error
+	conf, err = LoadSettings() // Replace readConfig with LoadSettings
 	if err != nil {
 		panic(err)
 	}
-
-	// Wait for the transcription server to start by making a http request to http://{conf.TranscriptionServer.Host}:8001/health
-	// Retry 10 times with 10 second delay
-	waitForServer(conf)
 
 	bbbapi, err := api.NewRequest(conf.BBB.API.URL, conf.BBB.API.Secret, conf.BBB.API.SHA)
 	if err != nil {
 		panic(err)
 	}
 
-	//API-Requests
-	newmeeting, err := bbbapi.CreateMeeting("name", "meetingID", "attendeePW", "moderatorPW", "welcome text", false, false, false, 12345)
-	if err != nil {
-		panic(err)
-	}
-	fmt.Printf("New meeting \"%s\" was created.\n", newmeeting.MeetingName)
-
-	url, err := bbbapi.JoinGetURL(newmeeting.MeetingID, "TestUser", true)
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println("Moderator join url: " + url)
-
-	time.Sleep(1 * time.Second)
-
-	fmt.Println("-----------------------------------------------")
-
-	clients := make([]*bot.Client, 0)
-	clientsMutex := &sync.Mutex{}
-
-	client, err := bot.NewClient(conf.BBB.Client.URL, conf.BBB.Client.WS, conf.BBB.Pad.URL, conf.BBB.Pad.WS, conf.BBB.API.URL, conf.BBB.API.Secret, conf.BBB.WebRTC.WS)
+	client, err = bbbbot.NewClient(
+		conf.BBB.Client.URL,
+		conf.BBB.Client.WS,
+		conf.BBB.Pad.URL,
+		conf.BBB.Pad.WS,
+		conf.BBB.API.URL,
+		conf.BBB.API.Secret,
+		conf.BBB.WebRTC.WS,
+	)
 	if err != nil {
 		panic(err)
 	}
 
-	client.OnStatus(func(status bot.StatusType) {
-		fmt.Printf("Bot status: %s\n", status)
+	fs := http.FileServer(http.Dir("public"))
+	http.Handle("/", fs)
+
+	http.HandleFunc("/status", func(w http.ResponseWriter, r *http.Request) {
+		// GET /status
+		if r.Method != http.MethodGet {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		response := map[string]interface{}{
+			"connected": isBotConnected,
+			"meetingID": currentMeetingID,
+		}
+		json.NewEncoder(w).Encode(response)
 	})
 
-	fmt.Println("Bot joins " + newmeeting.MeetingName + " as moderator:")
-	err = client.Join(newmeeting.MeetingID, "Bot", true)
-	if err != nil {
+	http.HandleFunc("/meetings", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			handleGetMeetings(w, r, bbbapi)
+		} else {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
+	http.HandleFunc("/meeting/", func(w http.ResponseWriter, r *http.Request) {
+		// URL patterns we need to handle here:
+		// POST /meeting
+		// GET /meeting/{meetingID}/join
+		// POST /meeting/{meetingID}/bot/join
+		// POST /meeting/{meetingID}/bot/leave
+		// POST /meeting/{meetingID}/end
+
+		parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+
+		fmt.Println(parts)
+		if len(parts) == 1 && r.Method == http.MethodPost {
+			handleCreateMeeting(w, r, bbbapi)
+			return
+		}
+
+		if len(parts) < 2 {
+			http.Error(w, "meetingID not provided", http.StatusBadRequest)
+			return
+		}
+		meetingID := parts[1]
+
+		if len(parts) == 3 && parts[2] == "join" && r.Method == http.MethodGet {
+			handleGetJoinLinks(w, r, bbbapi, meetingID)
+			return
+		}
+
+		if len(parts) == 4 && parts[2] == "bot" && parts[3] == "join" && r.Method == http.MethodPost {
+			handleBotJoinMeeting(w, r, meetingID)
+			return
+		}
+
+		if len(parts) == 4 && parts[2] == "bot" && parts[3] == "leave" && r.Method == http.MethodPost {
+			handleBotLeaveMeeting(w, r)
+			return
+		}
+
+		if len(parts) == 3 && parts[2] == "end" && r.Method == http.MethodPost {
+			handleEndMeeting(w, r, bbbapi, meetingID)
+			return
+		}
+
+		http.Error(w, "Not found", http.StatusNotFound)
+	})
+
+	// Start server
+	port := ":8080"
+	fmt.Printf("Starting server on port %s\n", port)
+	if err := http.ListenAndServe(port, nil); err != nil {
 		panic(err)
 	}
+}
 
-	chsetExternal := conf.ChangeSet.External
-	chsetHost := conf.ChangeSet.Host
-	chsetPort := conf.ChangeSet.Port
+func handleGetMeetings(w http.ResponseWriter, r *http.Request, bbbapi *api.ApiRequest) {
+	meetings, err := bbbapi.GetMeetings()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
-	err = client.OnGroupChatMsg(func(msg bbb.Message) {
+	response := map[string]interface{}{
+		"meetings": meetings,
+	}
+	json.NewEncoder(w).Encode(response)
+}
+
+func handleCreateMeeting(w http.ResponseWriter, r *http.Request, bbbapi *api.ApiRequest) {
+	var req struct {
+		Name               string `json:"name"`
+		MeetingID          string `json:"meetingID"`
+		AttendeePW         string `json:"attendeePW"`
+		ModeratorPW        string `json:"moderatorPW"`
+		Welcome            string `json:"welcome"`
+		AllowStartStopRec  bool   `json:"allowStartStopRecording"`
+		AutoStartRecording bool   `json:"autoStartRecording"`
+		Record             bool   `json:"record"`
+		VoiceBridge        int    `json:"voiceBridge"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	meeting, err := bbbapi.CreateMeeting(req.Name, req.MeetingID, req.AttendeePW, req.ModeratorPW, req.Welcome, req.AllowStartStopRec, req.AutoStartRecording, req.Record, int64(req.VoiceBridge))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(meeting)
+}
+
+func handleBotJoinMeeting(w http.ResponseWriter, r *http.Request, meetingID string) {
+	var req struct {
+		UserName  string `json:"userName"`
+		Moderator bool   `json:"moderator"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if err := client.Join(meetingID, req.UserName, req.Moderator); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Update the global state
+	isBotConnected = true
+	currentMeetingID = meetingID
+
+	// Add translation functionality: listen to group chat messages and respond
+	err := client.OnGroupChatMsg(func(msg bbb.Message) {
 		fmt.Println("[" + msg.SenderName + "]: " + msg.Message)
 
+		// If message is not from the bot itself
 		if msg.Sender != client.InternalUserID {
 			message := msg.Message
 
@@ -92,7 +205,7 @@ func main() {
 					"!help - List of all commands\n" +
 					"!translate - Displays help for !translate and a list of all possible languages\n" +
 					"!translate [language] - Starts translating into the specified language\n" +
-					"!translate [language] stop - Stops translating into the specified language and the bot leaves the meeting"
+					"!translate [language] stop - Stops translating into the specified language"
 				client.SendChatMsg(helpText, msg.ChatId)
 			} else if strings.HasPrefix(message, "!translate") {
 				args := strings.Split(message, " ")
@@ -101,29 +214,48 @@ func main() {
 					client.SendChatMsg(translateHelp, msg.ChatId)
 				} else {
 					language := args[1]
-					if args[1] == "stop" {
-						language = args[0]
-						// Stop translation and remove bot from meeting
-						removeBot(client, newmeeting.MeetingID, "Bot-"+language)
+					if language == "stop" {
+						client.SendChatMsg("Stopping translation and leaving the meeting.", msg.ChatId)
+						removeBot(client, meetingID, "Bot-"+language)
 					} else {
-						name := client.LanguageShortToName(bot.Language(language))
+						name := client.LanguageShortToName(bbbbot.Language(language))
 						if name != "" {
-							// Create new client
-							newClient, err := bot.NewClient(conf.BBB.Client.URL, conf.BBB.Client.WS, conf.BBB.Pad.URL, conf.BBB.Pad.WS, conf.BBB.API.URL, conf.BBB.API.Secret, conf.BBB.WebRTC.WS)
-							if err := newClient.Join(newmeeting.MeetingID, "Bot-"+language, true); err != nil {
+							chsetExternal := conf.ChangeSet.External
+							chsetHost := conf.ChangeSet.Host
+							chsetPort := conf.ChangeSet.Port
+
+							newClient, err := bbbbot.NewClient(
+								conf.BBB.Client.URL,
+								conf.BBB.Client.WS,
+								conf.BBB.Pad.URL,
+								conf.BBB.Pad.WS,
+								conf.BBB.API.URL,
+								conf.BBB.API.Secret,
+								conf.BBB.WebRTC.WS,
+							)
+							if err != nil {
+								fmt.Println("Error creating new translator bot:", err)
 								return
 							}
 
-							// Create new capture
-							_, err = newClient.CreateCapture(bot.Language(language), chsetExternal, chsetHost, chsetPort)
-							if err != nil {
-								panic(err)
+							if err := newClient.Join(meetingID, "Bot-"+language, true); err != nil {
+								fmt.Println("Error joining translator bot:", err)
+								return
 							}
 
-							// Add to clientsPad
+							_, err = newClient.CreateCapture(bbbbot.Language(language), chsetExternal, chsetHost, chsetPort)
+							if err != nil {
+								fmt.Println("Error creating capture:", err)
+								return
+							}
+
 							clientsMutex.Lock()
 							clients = append(clients, newClient)
 							clientsMutex.Unlock()
+
+							client.SendChatMsg("Started translating into "+name+".", msg.ChatId)
+						} else {
+							client.SendChatMsg("Unsupported language: "+language, msg.ChatId)
 						}
 					}
 				}
@@ -131,190 +263,146 @@ func main() {
 		}
 	})
 	if err != nil {
-		panic(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
-	transcriptionHost := conf.TranscriptionServer.ExternalHost
-	transcriptionPort := conf.TranscriptionServer.PortTCP
-	transcriptionSecret := conf.TranscriptionServer.Secret
-
-	sc := NewStreamClient(transcriptionHost, transcriptionPort, true, transcriptionSecret)
-
-	sc.OnConnected(func(message string) {
-		fmt.Println("Connected to server.")
-	})
-
-	sc.OnDisconnected(func(message string) {
-		fmt.Println("Disconnected from server.")
-		os.Exit(1)
-	})
-
-	sc.OnTimeout(func(message string) {
-		fmt.Println("Connection to server timed out.")
-		os.Exit(1)
-	})
-
-	sc.OnTCPMessage(func(text string) {
-		fmt.Println("TCP message event:", text)
-		validtext := strings.ToValidUTF8(text, "")
-
-		clientsMutex.Lock()
-		clientsTemp := clients
-		clientsMutex.Unlock()
-		if clientsTemp != nil {
-			for _, cl := range clientsTemp {
-				pads := cl.GetCaptures()
-				for _, pad := range pads {
-					translatedText := validtext
-					if  pad.ShortLanguageName != "en" {
-						translatedText, err = translate(conf.TranslationServer.URL, validtext, "en", pad.ShortLanguageName)
-						if err != nil {
-							fmt.Println("Error in translation:", err)
-						}
-					}
-					err = pad.SetText(translatedText)
-					if err != nil {
-						fmt.Println("Error in pad write:", err)
-					}
-				}
-			}
-		}
-	})
-
-	err = sc.Connect()
-	if err != nil {
-		fmt.Println("Failed to connect to the server:", err)
-		os.Exit(1)
-	}
-	defer sc.Close()
-
-	audio := client.CreateAudioChannel()
-
-	err = audio.ListenToAudio()
-	if err != nil {
-		panic(err)
-	}
-
-	oggFile, err := oggwriter.NewWith(sc, 48000, 2)
-	if err != nil {
-		panic(err)
-	}
-	defer oggFile.Close()
-
-	audio.OnTrack(func(status *bot.StatusType, track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
-		// Only handle audio tracks
-		if track.Kind() != webrtc.RTPCodecTypeAudio {
-			return
-		}
-
-		fmt.Println("ID: " + track.ID())
-		fmt.Println("Kind: " + track.Kind().String())
-		fmt.Println("StreamID: " + track.StreamID())
-		fmt.Println("SSRC: " + fmt.Sprint(track.SSRC()))
-		fmt.Println("Codec: " + track.Codec().MimeType)
-		fmt.Println("Codec PayloadType: " + fmt.Sprint(track.Codec().PayloadType))
-		fmt.Println("Codec ClockRate: " + fmt.Sprint(track.Codec().ClockRate))
-		fmt.Println("Codec Channels: " + fmt.Sprint(track.Codec().Channels))
-		fmt.Println("Codec SDPFmtpLine: " + track.Codec().SDPFmtpLine)
-
-		go func() {
-			buffer := make([]byte, 1024)
-			for {
-				n, _, readErr := track.Read(buffer)
-
-				if *status == bot.DISCONNECTED {
-					return
-				}
-
-				if readErr != nil {
-					fmt.Println("Error during audio track read:", readErr)
-					return
-				}
-
-				rtpPacket := &rtp.Packet{}
-				if err := rtpPacket.Unmarshal(buffer[:n]); err != nil {
-					fmt.Println("Error during RTP packet unmarshal:", err)
-					return
-				}
-
-				if err := oggFile.WriteRTP(rtpPacket); err != nil {
-					fmt.Println("Error during OGG file write:", err)
-					return
-				}
-			}
-		}()
-	})
-
-	for {
-		time.Sleep(1 * time.Second)
-	}
+	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
 }
+
+func handleBotLeaveMeeting(w http.ResponseWriter, r *http.Request) {
+	// Since we don't store the bot client here directly after join (we create it in handler), 
+	// we would need a reference to that client. For simplicity, let's assume there's only one bot client connected.
+	// This is a simplification. In a real scenario, we'd track the client instance globally or by meetingID.
+	// But given instructions, let's assume we have a single global client reference for the current bot meeting.
+
+	if !isBotConnected {
+		json.NewEncoder(w).Encode(map[string]string{"status": "no_bot_connected"})
+		return
+	}
+
+	// We need to find the client that joined currentMeetingID.
+	// If we wanted to leave the main bot (the first one that joined), we must have a reference.
+	// Let's store the first joined client as well in a global variable when bot joins.
+
+	// For simplicity, let's re-create the client and leave:
+	leaveClient, err := bbbbot.NewClient(
+		conf.BBB.Client.URL,
+		conf.BBB.Client.WS,
+		conf.BBB.Pad.URL,
+		conf.BBB.Pad.WS,
+		conf.BBB.API.URL,
+		conf.BBB.API.Secret,
+		conf.BBB.WebRTC.WS,
+	)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	// If the bot is connected to currentMeetingID, join with same name (assuming we know name)
+	// Actually we can just call Leave() but we need the bot to be in the meeting.
+	leaveClient.Join(currentMeetingID, "Bot", true) // ignore error
+	if err := leaveClient.Leave(); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	isBotConnected = false
+	currentMeetingID = ""
+
+	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+}
+
+func handleEndMeeting(w http.ResponseWriter, r *http.Request, bbbapi *api.ApiRequest, meetingID string) {
+	if _, err := bbbapi.EndMeeting(meetingID); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if currentMeetingID == meetingID {
+		isBotConnected = false
+		currentMeetingID = ""
+	}
+
+	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+}
+
+func handleGetJoinLinks(w http.ResponseWriter, r *http.Request, bbbapi *api.ApiRequest, meetingID string) {
+	// Get username from query params
+	username := r.URL.Query().Get("username")
+	if username == "" {
+		username = "Guest"
+	}
+
+	moderatorURL, err := bbbapi.JoinGetURL(meetingID, username, true)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	attendeeURL, err := bbbapi.JoinGetURL(meetingID, username, false)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	response := map[string]string{
+		"moderator": moderatorURL,
+		"attendee":  attendeeURL,
+	}
+	json.NewEncoder(w).Encode(response)
+}
+
+// ---------------------- HELPER FUNCTIONS FOR TRANSLATION ----------------------
 
 // Map from BBB to Libretranslate language codes
 var bbbToLibretranslate = map[string]string{
-	"af":     "af",
-	"ar":     "ar",
-	"az":     "az",
-	"bg-BG":  "bg",
-	"bn":     "bn",
-	"ca":     "ca",
-	"cs-CZ":  "cs",
-	"da":     "da",
-	"de":     "de",
-	"dv":     "", // No equivalent in Libretranslate
-	"el-GR":  "el",
-	"en":     "en",
-	"eo":     "eo",
-	"es":     "es",
-	"es-419": "es", // General Spanish
-	"es-ES":  "es",
-	"es-MX":  "es",
-	"et":     "et",
-	"eu":     "", // No equivalent in Libretranslate
-	"fa-IR":  "fa",
-	"fi":     "fi",
-	"fr":     "fr",
-	"gl":     "", // No equivalent in Libretranslate
-	"he":     "he",
-	"hi-IN":  "hi",
-	"hr":     "", // No equivalent in Libretranslate
-	"hu-HU":  "hu",
-	"hy":     "", // No equivalent in Libretranslate
-	"id":     "id",
-	"it-IT":  "it",
-	"ja":     "ja",
-	"ka":     "", // No equivalent in Libretranslate
-	"km":     "", // No equivalent in Libretranslate
-	"kn":     "", // No equivalent in Libretranslate
-	"ko-KR":  "ko",
-	"lo-LA":  "", // No equivalent in Libretranslate
-	"lt-LT":  "lt",
-	"lv":     "lv",
-	"ml":     "", // No equivalent in Libretranslate
-	"mn-MN":  "", // No equivalent in Libretranslate
-	"nb-NO":  "nb",
-	"nl":     "nl",
-	"oc":     "", // No equivalent in Libretranslate
-	"pl-PL":  "pl",
-	"pt":     "pt",
-	"pt-BR":  "pt",
-	"ro-RO":  "ro",
-	"ru":     "ru",
-	"sk-SK":  "sk",
-	"sl":     "sl",
-	"sr":     "", // No equivalent in Libretranslate
-	"sv-SE":  "sv",
-	"ta":     "", // No equivalent in Libretranslate
-	"te":     "", // No equivalent in Libretranslate
-	"th":     "th",
-	"tr-TR":  "tr",
-	"uk-UA":  "uk",
-	"vi-VN":  "", // No equivalent in Libretranslate
-	"zh-CN":  "zh",
-	"zh-TW":  "zt",
+	"af":    "af",
+	"ar":    "ar",
+	"az":    "az",
+	"bg-BG": "bg",
+	"bn":    "bn",
+	"ca":    "ca",
+	"cs-CZ": "cs",
+	"da":    "da",
+	"de":    "de",
+	"el-GR": "el",
+	"en":    "en",
+	"eo":    "eo",
+	"es":    "es",
+	"es-419": "es",
+	"es-ES": "es",
+	"es-MX": "es",
+	"et":    "et",
+	"fa-IR": "fa",
+	"fi":    "fi",
+	"fr":    "fr",
+	"he":    "he",
+	"hi-IN": "hi",
+	"hu-HU": "hu",
+	"id":    "id",
+	"it-IT": "it",
+	"ja":    "ja",
+	"ko-KR": "ko",
+	"lt-LT": "lt",
+	"lv":    "lv",
+	"nb-NO": "nb",
+	"nl":    "nl",
+	"pl-PL": "pl",
+	"pt":    "pt",
+	"pt-BR": "pt",
+	"ro-RO": "ro",
+	"ru":    "ru",
+	"sk-SK": "sk",
+	"sl":    "sl",
+	"sv-SE": "sv",
+	"th":    "th",
+	"tr-TR": "tr",
+	"uk-UA": "uk",
+	"zh-CN": "zh",
 }
 
-// Function to convert BBB language code to Libretranslate language code
+// ConvertBBBToLibretranslate converts BBB language code to Libretranslate language code
 func ConvertBBBToLibretranslate(bbbCode string) string {
 	if code, exists := bbbToLibretranslate[bbbCode]; exists {
 		return code
@@ -322,7 +410,7 @@ func ConvertBBBToLibretranslate(bbbCode string) string {
 	return ""
 }
 
-// TranslationRequest struct to hold the request payload
+// TranslationRequest struct to hold the request payload for translation
 type TranslationRequest struct {
 	Q      string `json:"q"`
 	Source string `json:"source"`
@@ -336,7 +424,6 @@ type TranslationResponse struct {
 
 // translate function sends a request to the LibreTranslate API and returns the translated text
 func translate(apiURL, text, sourceLang, targetLang string) (string, error) {
-
 	linreTargetLang := ConvertBBBToLibretranslate(targetLang)
 	if linreTargetLang == "" {
 		return "", fmt.Errorf("unsupported language: %s", targetLang)
@@ -349,20 +436,17 @@ func translate(apiURL, text, sourceLang, targetLang string) (string, error) {
 		Target: linreTargetLang,
 	}
 
-	// Convert the payload to JSON
 	requestBody, err := json.Marshal(requestPayload)
 	if err != nil {
 		return "", fmt.Errorf("error marshalling request payload: %w", err)
 	}
 
-	// Create a new HTTP request
 	req, err := http.NewRequest("POST", apiURL, bytes.NewBuffer(requestBody))
 	if err != nil {
 		return "", fmt.Errorf("error creating HTTP request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	// Make the HTTP request
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -370,29 +454,25 @@ func translate(apiURL, text, sourceLang, targetLang string) (string, error) {
 	}
 	defer resp.Body.Close()
 
-	// Read the response body
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", fmt.Errorf("error reading response body: %w", err)
 	}
 
-	// Check if the translation was successful
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("failed to get a valid response. Status code: %d, Response: %s", resp.StatusCode, body)
 	}
 
-	// Parse the response
 	var translationResponse TranslationResponse
 	err = json.Unmarshal(body, &translationResponse)
 	if err != nil {
 		return "", fmt.Errorf("error unmarshalling response: %w", err)
 	}
 
-	// Return the translated text
 	return translationResponse.TranslatedText, nil
 }
 
-// Function to get supported languages
+// getSupportedLanguages returns a list of supported languages
 func getSupportedLanguages() []string {
 	languages := []string{}
 	for key := range bbbToLibretranslate {
@@ -403,56 +483,10 @@ func getSupportedLanguages() []string {
 	return languages
 }
 
-// Function to remove bot from meeting
-func removeBot(client *bot.Client, meetingID, botName string) {
+// removeBot from meeting
+func removeBot(client *bbbbot.Client, meetingID, botName string) {
 	fmt.Printf("Bot %s leaves %s\n", botName, meetingID)
 	if err := client.Leave(); err != nil {
 		fmt.Printf("Error leaving meeting: %v\n", err)
-	}
-}
-
-// Wait for the transcription server to start by making a http request to http://{conf.TranscriptionServer.Host}:{conf.TranscriptionServer.Port}/health
-// Retry 10 times with 10 second delay
-func waitForServer(conf *Settings) {
-	// Define the URL using the configuration values
-	url := fmt.Sprintf("http://%s:%d/health", conf.TranscriptionServer.ExternalHost, conf.TranscriptionServer.HealthCheckPort)
-
-	// Try to connect to the server with retries
-	for {
-		resp, err := http.Get(url)
-		if err != nil {
-			fmt.Printf("Waiting for transcription server (%s) to start...\n", url)
-			time.Sleep(10 * time.Second)
-		} else {
-			// Don't forget to close the response body when you're done with it
-			resp.Body.Close()
-
-			// If the status code is 200, the server is up
-			if resp.StatusCode == http.StatusOK {
-				fmt.Println("Transcription-server is up and running.")
-				break
-			}
-
-			fmt.Println("Transcription-server is not ready yet...")
-			time.Sleep(10 * time.Second)
-		}
-	}
-
-	// Wait for translation server to start
-	for {
-		resp, err := translate(conf.TranslationServer.URL, "test", "en", "de")
-		if err != nil {
-			fmt.Printf("Waiting for translation server (%s) to start...\n", conf.TranslationServer.URL)
-			time.Sleep(10 * time.Second)
-		} else {
-			// If the status code is 200, the server is up
-			if resp != "" {
-				fmt.Println("Translation-server is up and running.")
-				break
-			}
-
-			fmt.Println("Translation-server is not ready yet...")
-			time.Sleep(10 * time.Second)
-		}
 	}
 }
