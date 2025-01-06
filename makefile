@@ -3,9 +3,19 @@
 # Define flags
 IS_WSL := $(shell grep -qi microsoft /proc/version && echo yes || echo no)
 
-all: install
+check-not-root:
+	@if [ "$$(id -u)" = "0" ]; then \
+	  echo "Error: Do not run this Makefile as root (UID 0)."; \
+	  exit 1; \
+	fi
+	@if [ -n "$${SUDO_USER}" ]; then \
+	  echo "Error: Do not run this Makefile via sudo."; \
+	  exit 1; \
+	fi
 
-install:
+all: check-not-root install
+
+install: check-not-root
 ifeq ($(IS_WSL), yes)
 	@./setup.sh --check || sudo ./setup.sh --wsl
 else
@@ -13,7 +23,7 @@ else
 endif
 	@echo "All dependencies are installed"
 
-install-dev:
+install-dev: check-not-root
 ifeq ($(IS_WSL), yes)
 	@./setup.sh --check || sudo ./setup.sh --wsl
 else
@@ -21,7 +31,7 @@ else
 endif
 	@echo "All dependencies are installed"
 
-build:
+build: check-not-root
 	@if [ ! "$$(ls -A transcription-service)" ]; then \
 		git submodule update --init --recursive; \
 		cd changeset-grpc/etherpad-lite; \
@@ -44,16 +54,16 @@ build:
 		bash -c "source .venv/bin/activate && pip install -r requirements.txt && deactivate"; \
 	fi
 
-generate-env-files:
+generate-env-files: check-not-root
 	@if [ ! -f .env -o ! -f .env-dev -o ! -f .env-dev-docker ]; then \
 		./generate-env.sh; \
 	fi
 
 
-run: generate-env-files install stop
+run: check-not-root generate-env-files install stop
 	@docker compose up -d
 
-run-dev: generate-env-files install-dev stop build
+run-dev: check-not-root generate-env-files install-dev stop build
 	@docker compose -f docker-compose-dev.yml up --no-start
 	@screen -dmS bot bash -c "cd bot && set -a && source ../.env-dev && set +a && go run . 2>&1 | tee ../logs/bot.log"
 	@screen -dmS changeset-grpc bash -c "cd changeset-grpc && set -a && source ../.env-dev && set +a && npm run start 2>&1 | tee ../logs/changeset-grpc.log"
@@ -61,13 +71,13 @@ run-dev: generate-env-files install-dev stop build
 	@screen -dmS translation-service bash -c "docker compose -f docker-compose-dev.yml up translation-service 2>&1 | tee logs/translation-service.log"
 	@screen -dmS prometheus bash -c "docker compose -f docker-compose-dev.yml up prometheus  2>&1 | tee logs/prometheus.log"
 
-run-dev-docker: generate-env-files install-dev stop
+run-dev-docker: check-not-root generate-env-files install-dev stop
 	@docker compose -f docker-compose-dev.yml up -d --build
 
-stop: stop-dev stop-dev-docker
+stop: check-not-root stop-dev stop-dev-docker
 	@docker compose down
 
-stop-dev:
+stop-dev: check-not-root
 	@for service in bot changeset-grpc transcription-service; do \
 		screen -ls | grep ".$$service" | awk '{print $$1}' | while read session; do \
 			echo "Stopping screen session $$session..."; \
@@ -77,5 +87,5 @@ stop-dev:
 	@echo "Stopping translation-service..."; docker compose -f docker-compose-dev.yml down translation-service
 	@echo "Stopping prometheus..."; docker compose -f docker-compose-dev.yml down prometheus
 
-stop-dev-docker:
+stop-dev-docker: check-not-root
 	@docker compose -f docker-compose-dev.yml down
