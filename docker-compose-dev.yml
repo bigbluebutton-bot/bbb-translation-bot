@@ -13,6 +13,8 @@ services:
     depends_on:
       - changeset-service
       - transcription-service
+    ports:
+      - "8080:8080"
 
   changeset-service:
     container_name: changeset-service
@@ -39,8 +41,8 @@ services:
     env_file:
       - .env-dev-docker
     volumes:
-      - ./.models/whisper:/app/.models
-      # - ./logs:/app/logs
+      - ./.models:/app/.models
+      - ./transcription-service/logs:/app/logs
     deploy:
       resources:
         reservations:

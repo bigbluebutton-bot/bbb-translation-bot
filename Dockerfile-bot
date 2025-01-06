@@ -3,6 +3,7 @@ FROM golang:alpine as build
 
 WORKDIR /go/src/app
 COPY ./bot/*.go ./bot/go.mod ./bot/go.sum ./
+COPY ./bot/public/* ./public/
 
 RUN go mod tidy
 
@@ -18,6 +19,7 @@ FROM gcr.io/distroless/static-debian11
 
 # copy from build image to this image
 COPY --from=build /go/bin/* /
+COPY --from=build /go/src/app/public /public
 
 # set start command
 CMD ["/app"]
