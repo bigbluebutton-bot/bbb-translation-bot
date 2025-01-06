@@ -14,9 +14,10 @@
             "name": "Python: Debug Transcription Service",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/transcription-service/main.py", // Adjust to your entry script
+            "program": "${workspaceFolder}/transcription-service/main.py",
             "console": "integratedTerminal",
             "cwd": "${workspaceFolder}/transcription-service",
+            "python": "${workspaceFolder}/transcription-service/.venv/bin/python",
             "env": {
                 // Add any environment variables needed
             },
