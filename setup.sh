@@ -793,7 +793,7 @@ check_nvidia_driver_debian() {
 # Function to install NVIDIA driver on Debian 12
 nvidia_install_debian() {
     # Install necessary packages
-    apt install -y linux-headers-$(uname -r) build-essential dkms
+    apt install -y "linux-headers-$(uname -r)" build-essential dkms
 
     # Enable non-free repositories if not already enabled
     if ! grep -q 'non-free' /etc/apt/sources.list; then
