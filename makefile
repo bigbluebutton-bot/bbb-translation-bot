@@ -7,7 +7,7 @@ all: install
 
 install:
 ifeq ($(IS_WSL), yes)
-	@./setup.sh --wsl --check || sudo ./setup.sh --wsl
+	@./setup.sh --check || sudo ./setup.sh --wsl
 else
 	@./setup.sh --simple-setup --check || sudo ./setup.sh --simple-setup
 endif
@@ -15,9 +15,9 @@ endif
 
 install-dev:
 ifeq ($(IS_WSL), yes)
-	@./setup.sh --wsl --check || sudo ./setup.sh --wsl
+	@./setup.sh --check || sudo ./setup.sh --wsl
 else
-	@./setup.sh --ubuntu22 --check || sudo ./setup.sh --ubuntu22
+	@./setup.sh --check || sudo ./setup.sh
 endif
 	@echo "All dependencies are installed"
 

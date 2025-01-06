@@ -5,32 +5,84 @@ LOGIN_HINT_FILE="/etc/profile.d/install_hint.sh"
 
 # Main execution: Define tasks and run the main function
 main() {
-    if $INSTALL_ON_UBUNTU22; then
-        add_task "Install NVIDIA Drivers" nvidia_install check_nvidia_driver  # Skip if drivers are installed
-        add_task "Install NVIDIA CUDA" cuda_install check_cuda_installed  # Skip if CUDA is installed
-        add_task "Install NVIDIA CUDA Toolkit" cuda_toolkit check_toolkit  # Skip if toolkit is installed
-        add_task "Install NVIDIA cuDNN 8.9.7" install_cudnn check_cudnn_installed  # Skip if cuDNN is installed
-        add_task "Reboot" configure_reboot_ubuntu22 check_reboot_configured_ubuntu22  # Skip if reboot is needed
-        add_task "Install Docker" install_docker check_docker_installed  # Skip if Docker is installed
-        add_task "Install Docker with NVIDIA support" install_docker_nvidia check_docker_nvidia  # Skip if Docker with NVIDIA support is installed
-        add_task "Install ffmpeg" install_ffmpeg check_ffmpeg_installed  # Skip if ffmpeg is installed
-        add_task "Install golang" install_golang check_golang_installed  # Skip if golang is installed
-        add_task "Install python3" install_python3 check_python3_installed  # Skip if python3 is installed
-        add_task "Install nodejs" install_nodejs check_nodejs_installed  # Skip if nodejs is installed
-    elif $INSTALL_SIMPLE_SETUP; then
-        add_task "Install NVIDIA Drivers" nvidia_install check_nvidia_driver  # Skip if drivers are installed
-        add_task "Install NVIDIA CUDA" cuda_install check_cuda_installed  # Skip if CUDA is installed
-        add_task "Install NVIDIA CUDA Toolkit" cuda_toolkit check_toolkit  # Skip if toolkit is installed
-        add_task "Reboot" configure_reboot_simple check_reboot_configured_simple  # Skip if reboot is needed
-        add_task "Install Docker" install_docker check_docker_installed  # Skip if Docker is installed
-        add_task "Install Docker with NVIDIA support" install_docker_nvidia check_docker_nvidia  # Skip if Docker with NVIDIA support is installed
-    elif $INSTALL_ON_WSL; then
-        add_task "Install NVIDIA CUDA Toolkit" cuda_toolkit check_toolkit  # Skip if toolkit is installed
-        add_task "Install NVIDIA cuDNN 8.9.7" install_cudnn check_cudnn_installed  # Skip if cuDNN is installed
-        add_task "Install ffmpeg" install_ffmpeg check_ffmpeg_installed  # Skip if ffmpeg is installed
-        add_task "Install golang" install_golang check_golang_installed  # Skip if golang is installed
-        add_task "Install python3" install_python3 check_python3_installed  # Skip if python3 is installed
-        add_task "Install nodejs" install_nodejs check_nodejs_installed  # Skip if nodejs is installed
+    os_name=$(get_os)
+    if [ $? -ne 0 ]; then
+        echo "❌ Unsupported OS or version: $os_name"
+        exit 1
+    fi
+
+    # Simple setup
+    if $INSTALL_SIMPLE_SETUP; then
+        if [ "$os_name" == "Ubuntu 22" ]; then
+            # Ubuntu 22
+            add_task "Install NVIDIA Drivers" nvidia_install check_nvidia_driver  # Skip if drivers are installed
+            add_task "Install NVIDIA CUDA" cuda_install check_cuda_installed  # Skip if CUDA is installed
+            add_task "Install NVIDIA CUDA Toolkit" cuda_toolkit check_toolkit  # Skip if toolkit is installed
+            add_task "Reboot" configure_reboot_simple check_reboot_configured_simple  # Skip if reboot is needed
+            add_task "Install Docker" install_docker check_docker_installed  # Skip if Docker is installed
+            add_task "Install Docker with NVIDIA support" install_docker_nvidia check_docker_nvidia  # Skip if Docker with NVIDIA support is installed
+        elif [ "$os_name" == "Ubuntu 22 WSL" ]; then
+            # Ubuntu 22 WSL
+            # Check the README for WSL
+            exit 1
+        elif [ "$os_name" == "Debian 12" ]; then
+            # Debian 12
+            add_task "Install NVIDIA Drivers" nvidia_install_debian check_nvidia_driver_debian  # Skip if drivers are installed
+            add_task "Install NVIDIA CUDA" cuda_install_debian check_cuda_installed_debian  # Skip if CUDA is installed
+            add_task "Install NVIDIA CUDA Toolkit" cuda_toolkit check_toolkit  # Skip if toolkit is installed
+            add_task "Reboot" configure_reboot_simple check_reboot_configured_simple  # Skip if reboot is needed
+            add_task "Install Docker" install_docker check_docker_installed  # Skip if Docker is installed
+            add_task "Install Docker with NVIDIA support" install_docker_nvidia check_docker_nvidia  # Skip if Docker with NVIDIA support is installed
+        elif [ "$os_name" == "Debian 12 WSL" ]; then
+            # Debian 12 WSL
+            # Check the README for WSL
+            exit 1
+        fi
+    else
+        # Full setup
+        if [ "$os_name" == "Ubuntu 22" ]; then
+            # Ubuntu 22
+            add_task "Install NVIDIA Drivers" nvidia_install check_nvidia_driver  # Skip if drivers are installed
+            add_task "Install NVIDIA CUDA" cuda_install check_cuda_installed  # Skip if CUDA is installed
+            add_task "Install NVIDIA CUDA Toolkit" cuda_toolkit check_toolkit  # Skip if toolkit is installed
+            add_task "Install NVIDIA cuDNN 8.9.7" install_cudnn check_cudnn_installed  # Skip if cuDNN is installed
+            add_task "Reboot" configure_reboot_ubuntu22 check_reboot_configured_ubuntu22  # Skip if reboot is needed
+            add_task "Install Docker" install_docker check_docker_installed  # Skip if Docker is installed
+            add_task "Install Docker with NVIDIA support" install_docker_nvidia check_docker_nvidia  # Skip if Docker with NVIDIA support is installed
+            add_task "Install ffmpeg" install_ffmpeg check_ffmpeg_installed  # Skip if ffmpeg is installed
+            add_task "Install golang" install_golang check_golang_installed  # Skip if golang is installed
+            add_task "Install python3" install_python3 check_python3_installed  # Skip if python3 is installed
+            add_task "Install nodejs" install_nodejs check_nodejs_installed  # Skip if nodejs is installed
+        elif [ "$os_name" == "Ubuntu 22 WSL" ]; then
+            # Ubuntu 22 WSL
+            add_task "Install NVIDIA CUDA Toolkit" cuda_toolkit check_toolkit  # Skip if toolkit is installed
+            add_task "Install NVIDIA cuDNN 8.9.7" install_cudnn check_cudnn_installed  # Skip if cuDNN is installed
+            add_task "Install ffmpeg" install_ffmpeg check_ffmpeg_installed  # Skip if ffmpeg is installed
+            add_task "Install golang" install_golang check_golang_installed  # Skip if golang is installed
+            add_task "Install python3" install_python3 check_python3_installed  # Skip if python3 is installed
+            add_task "Install nodejs" install_nodejs check_nodejs_installed  # Skip if nodejs is installed
+        elif [ "$os_name" == "Debian 12" ]; then
+            # Debian 12
+            add_task "Install NVIDIA Drivers" nvidia_install_debian check_nvidia_driver_debian  # Skip if drivers are installed
+            add_task "Install NVIDIA CUDA" cuda_install_debian check_cuda_installed_debian  # Skip if CUDA is installed
+            add_task "Install NVIDIA CUDA Toolkit" cuda_toolkit check_toolkit  # Skip if toolkit is installed
+            add_task "Install NVIDIA cuDNN 8.9.7" install_cudnn check_cudnn_installed  # Skip if cuDNN is installed
+            add_task "Reboot" configure_reboot_ubuntu22 check_reboot_configured_ubuntu22  # Skip if reboot is needed
+            add_task "Install Docker" install_docker check_docker_installed  # Skip if Docker is installed
+            add_task "Install Docker with NVIDIA support" install_docker_nvidia check_docker_nvidia  # Skip if Docker with NVIDIA support is installed
+            add_task "Install ffmpeg" install_ffmpeg check_ffmpeg_installed  # Skip if ffmpeg is installed
+            add_task "Install golang" install_golang check_golang_installed  # Skip if golang is installed
+            add_task "Install python3" install_python3 check_python3_installed  # Skip if python3 is installed
+            add_task "Install nodejs" install_nodejs check_nodejs_installed  # Skip if nodejs is installed
+        elif [ "$os_name" == "Debian 12 WSL" ]; then
+            # Debian 12 WSL
+            add_task "Install NVIDIA CUDA Toolkit" cuda_toolkit check_toolkit  # Skip if toolkit is installed
+            add_task "Install NVIDIA cuDNN 8.9.7" install_cudnn check_cudnn_installed  # Skip if cuDNN is installed
+            add_task "Install ffmpeg" install_ffmpeg check_ffmpeg_installed  # Skip if ffmpeg is installed
+            add_task "Install golang" install_golang check_golang_installed  # Skip if golang is installed
+            add_task "Install python3" install_python3 check_python3_installed  # Skip if python3 is installed
+            add_task "Install nodejs" install_nodejs check_nodejs_installed  # Skip if nodejs is installed
+        fi
     fi
 
     # Process task-specific logic
@@ -39,37 +91,82 @@ main() {
 
 CHECK_DEPENDENCIES=false
 check_dependencies() {
-    if $INSTALL_ON_UBUNTU22; then
-        check_nvidia_driver || exit 1
-        check_cuda_installed || exit 1
-        check_toolkit || exit 1
-        check_cudnn_installed || exit 1
-        check_docker_installed || exit 1
-        check_docker_nvidia || exit 1
-        check_ffmpeg_installed || exit 1
-        check_golang_installed || exit 1
-        check_python3_installed || exit 1
-        check_nodejs_installed || exit 1
-    elif $INSTALL_SIMPLE_SETUP; then
-        check_nvidia_driver || exit 1
-        check_cuda_installed || exit 1
-        check_toolkit || exit 1
-        check_docker_installed || exit 1
-        check_docker_nvidia || exit 1
-    elif $INSTALL_ON_WSL; then
-        check_toolkit || exit 1
-        check_cudnn_installed || exit 1
-        check_ffmpeg_installed || exit 1
-        check_golang_installed || exit 1
-        check_python3_installed || exit 1
-        check_nodejs_installed || exit 1
+    # Simple setup
+    if $INSTALL_SIMPLE_SETUP; then
+        if [ "$os_name" == "Ubuntu 22" ]; then
+            # Ubuntu 22
+            check_nvidia_driver || exit 1
+            check_cuda_installed || exit 1
+            check_toolkit || exit 1
+            check_docker_installed || exit 1
+            check_docker_nvidia || exit 1
+        elif [ "$os_name" == "Ubuntu 22 WSL" ]; then
+            # Ubuntu 22 WSL
+            check_nvidia_driver || exit 1
+            check_docker_installed || exit 1
+            check_docker_nvidia || exit 1
+            exit 1
+        elif [ "$os_name" == "Debian 12" ]; then
+            # Debian 12
+            check_nvidia_driver_debian || exit 1
+            check_toolkit || exit 1
+            check_docker_installed || exit 1
+            check_docker_nvidia || exit 1
+        elif [ "$os_name" == "Debian 12 WSL" ]; then
+            # Debian 12 WSL
+            check_toolkit || exit 1
+            check_docker_installed || exit 1
+            check_docker_nvidia || exit 1
+            exit 1
+        fi
+    else
+        # Full setup
+        if [ "$os_name" == "Ubuntu 22" ]; then
+            # Ubuntu 22
+            check_nvidia_driver || exit 1
+            check_cuda_installed || exit 1
+            check_toolkit || exit 1
+            check_cudnn_installed || exit 1
+            check_docker_installed || exit 1
+            check_docker_nvidia || exit 1
+            check_ffmpeg_installed || exit 1
+            check_golang_installed || exit 1
+            check_python3_installed || exit 1
+            check_nodejs_installed || exit 1
+        elif [ "$os_name" == "Ubuntu 22 WSL" ]; then
+            # Ubuntu 22 WSL
+            check_toolkit || exit 1
+            check_cudnn_installed || exit 1
+            check_ffmpeg_installed || exit 1
+            check_golang_installed || exit 1
+            check_python3_installed || exit 1
+            check_nodejs_installed || exit 1
+        elif [ "$os_name" == "Debian 12" ]; then
+            # Debian 12
+            check_nvidia_driver_debian || exit 1
+            check_cuda_installed_debian || exit 1
+            check_toolkit || exit 1
+            check_cudnn_installed || exit 1
+            check_docker_installed || exit 1
+            check_docker_nvidia || exit 1
+            check_ffmpeg_installed || exit 1
+            check_golang_installed || exit 1
+            check_python3_installed || exit 1
+            check_nodejs_installed || exit 1
+        elif [ "$os_name" == "Debian 12 WSL" ]; then
+            # Debian 12 WSL
+            check_toolkit || exit 1
+            check_cudnn_installed || exit 1
+            check_ffmpeg_installed || exit 1
+            check_golang_installed || exit 1
+            check_python3_installed || exit 1
+            check_nodejs_installed || exit 1
+        fi
     fi
     exit 0
 }
 
 # Capture parameters
-INSTALL_ON_UBUNTU22=false
-INSTALL_ON_WSL=false
 INSTALL_SIMPLE_SETUP=false
 STARTED_BY_CRONJOB=false
 
@@ -81,29 +178,16 @@ show_help() {
     # echo "  --cron         Indicate the script was started by a cronjob"
     # echo "  --user         Specify the user (required with --cron)"
     echo "  --simple-setup Perform a simple setup"
-    echo "  --ubuntu22     Install on Ubuntu 22.04"
-    echo "  --wsl          Install on Windows Subsystem for Linux with Ubuntu 22.04"
     echo "  --help         Show this help message and exit"
-    echo "  --check        Check all dependencies are already installed. Use with --ubuntu22, --wsl, or --simple-setup"
+    echo "  --check        Check all dependencies are already installed. You can use it with --simple-setup"
     exit 0
 }
-
-# Check if no arguments were provided
-if [ "$#" -eq 0 ]; then
-    show_help
-fi
 
 # Parse options
 while [[ "$1" != "" ]]; do
     case "$1" in
         --cron)
             STARTED_BY_CRONJOB=true
-            ;;
-        --ubuntu22)
-            INSTALL_ON_UBUNTU22=true
-            ;;
-        --wsl)
-            INSTALL_ON_WSL=true
             ;;
         --simple-setup)
             INSTALL_SIMPLE_SETUP=true
@@ -131,18 +215,8 @@ while [[ "$1" != "" ]]; do
 done
 
 # Validate allowed combinations
-if $INSTALL_SIMPLE_SETUP && ($INSTALL_ON_UBUNTU22 || $INSTALL_ON_WSL || $STARTED_BY_CRONJOB); then
+if $INSTALL_SIMPLE_SETUP && $STARTED_BY_CRONJOB; then
     echo "Invalid combination: --simple-setup cannot be combined with other options."
-    exit 1
-fi
-
-if $INSTALL_ON_UBUNTU22 && $INSTALL_ON_WSL; then
-    echo "Invalid combination: --ubuntu22 and --wsl cannot be used together."
-    exit 1
-fi
-
-if $STARTED_BY_CRONJOB && ! $INSTALL_ON_UBUNTU22; then
-    echo "Invalid combination: --cron must be used with --ubuntu22."
     exit 1
 fi
 
@@ -315,7 +389,7 @@ check_reboot_configured_ubuntu22() {
 }
 
 configure_reboot_ubuntu22() {
-    REBOOT_OPTIONS="--ubuntu22"
+    REBOOT_OPTIONS=""
     reboot_now
 }
 #------------------------------------------------------------
@@ -450,51 +524,89 @@ check_golang_installed() {
 ARCHITECTURE=$(dpkg --print-architecture)
 
 install_golang() {
+    echo "Starting Go installation..."
+
     # Get the latest Go version
+    echo "Fetching the latest Go version..."
     go_version=$(curl -s https://go.dev/VERSION?m=text | head -n 1 | sed 's/^go//')
-    
+    if [[ -z "$go_version" ]]; then
+        echo "Error: Failed to fetch the latest Go version." >&2
+        return 1
+    fi
+    echo "Latest Go version is: $go_version"
+
     # Temporary directory for downloading
     TEMP_DIR="/temp"
+    echo "Creating temporary directory at $TEMP_DIR..."
     mkdir -p "$TEMP_DIR"
     GO_ARCHIVE="${TEMP_DIR}/go${go_version}.linux-${ARCHITECTURE}.tar.gz"
-    
+    echo "Go archive will be downloaded to: $GO_ARCHIVE"
+
     # Download the Go binary and overwrite if it exists
+    echo "Downloading Go binary..."
     wget -q -O "$GO_ARCHIVE" "https://golang.org/dl/go${go_version}.linux-${ARCHITECTURE}.tar.gz"
-    
+    if [[ $? -ne 0 ]]; then
+        echo "Error: Failed to download Go binary." >&2
+        return 1
+    fi
+    echo "Go binary downloaded successfully."
+
     # Remove any existing Go installation
+    echo "Removing existing Go installation (if any)..."
     rm -rf /usr/local/go
-    
+
     # Extract the Go archive to /usr/local
+    echo "Extracting Go binary to /usr/local..."
     tar -C /usr/local -xzf "$GO_ARCHIVE"
-    
+    if [[ $? -ne 0 ]]; then
+        echo "Error: Failed to extract Go binary." >&2
+        return 1
+    fi
+    echo "Go binary extracted successfully."
+
     # Update PATH for the current (root) session
+    echo "Updating PATH for the current session..."
     export PATH=$PATH:/usr/local/go/bin
-    
+
     # Update PATH in root's .bashrc
+    echo "Ensuring PATH is updated in root's .bashrc..."
     if ! grep -q '/usr/local/go/bin' /root/.bashrc; then
         echo 'export PATH=$PATH:/usr/local/go/bin' >> /root/.bashrc
+        echo "PATH updated in root's .bashrc."
+    else
+        echo "PATH already exists in root's .bashrc."
     fi
 
     # Update PATH for the original user
     if [[ -n "$SUDO_USER" ]]; then
+        echo "Updating PATH for the original user: $SUDO_USER..."
         ORIGINAL_USER_HOME=$(eval echo ~$SUDO_USER)
         ORIGINAL_USER_BASHRC="$ORIGINAL_USER_HOME/.bashrc"
-        
-        # Add Go binary to the original user's PATH permanently
+
         if ! grep -q '/usr/local/go/bin' "$ORIGINAL_USER_BASHRC"; then
             echo 'export PATH=$PATH:/usr/local/go/bin' >> "$ORIGINAL_USER_BASHRC"
+            echo "PATH updated in $SUDO_USER's .bashrc."
+        else
+            echo "PATH already exists in $SUDO_USER's .bashrc."
         fi
 
         # Update the PATH for the original user's current session (if possible)
         if ps -p "$PPID" -o comm= | grep -q bash; then
             su - "$SUDO_USER" -c "export PATH=\$PATH:/usr/local/go/bin"
+            echo "PATH updated for $SUDO_USER's current session."
         fi
     else
         # For non-sudo cases, modify the current user's .bashrc
+        echo "Updating PATH for the current (non-sudo) user..."
         if ! grep -q '/usr/local/go/bin' ~/.bashrc; then
             echo 'export PATH=$PATH:/usr/local/go/bin' >> ~/.bashrc
+            echo "PATH updated in the current user's .bashrc."
+        else
+            echo "PATH already exists in the current user's .bashrc."
         fi
     fi
+
+    echo "Go installation completed successfully."
 }
 #------------------------------------------------------------
 
@@ -612,6 +724,108 @@ export NVM_DIR="$HOME/.nvm"
 
 
 
+#>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+#------------------------  Debian12  ------------------------
+#>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+#------------------------------------------------------------
+# 1. Install NVIDIA Drivers
+check_nvidia_driver_debian() {
+    if lsmod | grep -q 'nvidia'; then
+        return 0  # NVIDIA driver is installed
+    else
+        return 1  # NVIDIA driver is not installed
+    fi
+}
+
+# Function to install NVIDIA driver on Debian 12
+nvidia_install_debian() {
+    # Install necessary packages
+    apt install -y linux-headers-$(uname -r) build-essential dkms
+
+    # Enable non-free repositories if not already enabled
+    if ! grep -q 'non-free' /etc/apt/sources.list; then
+        echo "Enabling non-free repositories..."
+        sed -i '/^deb/s/$/ non-free/' /etc/apt/sources.list
+        apt update
+    fi
+
+    # Install NVIDIA driver
+    apt install -y nvidia-driver
+
+    # Blacklist nouveau driver
+    echo -e "blacklist nouveau\noptions nouveau modeset=0" | tee /etc/modprobe.d/blacklist-nouveau.conf
+    update-initramfs -u
+
+    # Inform the user to reboot
+    REBOOT_NEEDED=true
+}
+#------------------------------------------------------------
+
+#------------------------------------------------------------
+# 2. Install CUDA 12
+check_cuda_debian() {
+    if command -v nvcc &> /dev/null; then
+        return 0  # CUDA is installed
+    else
+        return 1  # CUDA is not installed
+    fi
+}
+
+cuda_install_debian() {
+    # Install prerequisites
+    apt install -y build-essential dkms
+
+    # Add NVIDIA package repository
+    apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/debian12/x86_64/3bf863cc.pub
+    echo "deb https://developer.download.nvidia.com/compute/cuda/repos/debian12/x86_64/ /" | tee /etc/apt/sources.list.d/cuda.list
+
+    # Update package lists again
+    apt update
+
+    # Install CUDA
+    apt install -y cuda
+
+
+    # Update PATH and LD_LIBRARY_PATH for the current root session
+    export PATH=/usr/local/cuda-12.0/bin:$PATH
+    export LD_LIBRARY_PATH=/usr/local/cuda-12.0/lib64:$LD_LIBRARY_PATH
+
+    # Update PATH and LD_LIBRARY_PATH in root's .bashrc
+    if ! grep -q '/usr/local/cuda-12.0/bin' /root/.bashrc; then
+        echo 'export PATH=/usr/local/cuda-12.0/bin:$PATH' >> /root/.bashrc
+    fi
+    if ! grep -q '/usr/local/cuda-12.0/lib64' /root/.bashrc; then
+        echo 'export LD_LIBRARY_PATH=/usr/local/cuda-12.0/lib64:$LD_LIBRARY_PATH' >> /root/.bashrc
+    fi
+
+    # Update PATH and LD_LIBRARY_PATH for the original user
+    if [[ -n "$SUDO_USER" ]]; then
+        ORIGINAL_USER_HOME=$(eval echo ~$SUDO_USER)
+        ORIGINAL_USER_BASHRC="$ORIGINAL_USER_HOME/.bashrc"
+        
+        # Update .bashrc for the original user
+        if ! grep -q '/usr/local/cuda-12.0/bin' "$ORIGINAL_USER_BASHRC"; then
+            echo 'export PATH=/usr/local/cuda-12.0/bin:$PATH' >> "$ORIGINAL_USER_BASHRC"
+        fi
+        if ! grep -q '/usr/local/cuda-12.0/lib64' "$ORIGINAL_USER_BASHRC"; then
+            echo 'export LD_LIBRARY_PATH=/usr/local/cuda-12.0/lib64:$LD_LIBRARY_PATH' >> "$ORIGINAL_USER_BASHRC"
+        fi
+
+        # Apply the changes to the original user's current session (if possible)
+        if ps -p "$PPID" -o comm= | grep -q bash; then
+            su - "$SUDO_USER" -c "export PATH=/usr/local/cuda-12.0/bin:\$PATH && export LD_LIBRARY_PATH=/usr/local/cuda-12.0/lib64:\$LD_LIBRARY_PATH"
+        fi
+    fi
+
+    # Flag for reboot
+    REBOOT_NEEDED=true
+}
+#------------------------------------------------------------
+
+#>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+#------------------------  Debian12  ------------------------
+#>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
 
 
@@ -627,6 +841,41 @@ export NVM_DIR="$HOME/.nvm"
 #<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 #--------------  SCRIPT STUFF: DONT TOUCH!!!  ---------------
 #<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+# Detect WSL
+is_wsl() {
+    if grep -qi "microsoft" /proc/version || grep -q "WSL" /proc/sys/kernel/osrelease; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+# Detect OS and version
+get_os() {
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        if [[ "$ID" == "ubuntu" && "$VERSION_ID" == 22* ]]; then
+            if is_wsl; then
+                echo "Ubuntu 22 WSL"
+            else
+                echo "Ubuntu 22"
+            fi
+            return 0
+        elif [[ "$ID" == "debian" && "$VERSION_ID" == 12* ]]; then
+            if is_wsl; then
+                echo "Debian 12 WSL"
+            else
+                echo "Debian 12"
+            fi
+            return 0
+        else
+            return 1
+        fi
+    else
+        return 1
+    fi
+}
+
 # Check if a screen session named "install_session" exists
 if ! $STARTED_BY_CRONJOB; then
     if screen -list | grep -q $SCREEN_NAME; then
