@@ -23,7 +23,7 @@ main() {
             add_task "Install Docker with NVIDIA support" install_docker_nvidia check_docker_nvidia  # Skip if Docker with NVIDIA support is installed
         elif [ "$os_name" == "Ubuntu 22 WSL" ]; then
             # Ubuntu 22 WSL
-            # Check the README for WSL
+            add_task "Install Docker" install_docker_wsl check_docker_installed_wsl  # Skip if Docker is installed
             exit 1
         elif [ "$os_name" == "Debian 12" ]; then
             # Debian 12
@@ -35,7 +35,7 @@ main() {
             add_task "Install Docker with NVIDIA support" install_docker_nvidia check_docker_nvidia  # Skip if Docker with NVIDIA support is installed
         elif [ "$os_name" == "Debian 12 WSL" ]; then
             # Debian 12 WSL
-            # Check the README for WSL
+            add_task "Install Docker" install_docker_wsl check_docker_installed_wsl  # Skip if Docker is installed
             exit 1
         fi
     else
@@ -57,6 +57,7 @@ main() {
             # Ubuntu 22 WSL
             add_task "Install NVIDIA CUDA Toolkit" cuda_toolkit check_toolkit  # Skip if toolkit is installed
             add_task "Install NVIDIA cuDNN 8.9.7" install_cudnn check_cudnn_installed  # Skip if cuDNN is installed
+            add_task "Install Docker" install_docker_wsl check_docker_installed_wsl  # Skip if Docker is installed
             add_task "Install ffmpeg" install_ffmpeg check_ffmpeg_installed  # Skip if ffmpeg is installed
             add_task "Install golang" install_golang check_golang_installed  # Skip if golang is installed
             add_task "Install python3" install_python3 check_python3_installed  # Skip if python3 is installed
@@ -78,6 +79,7 @@ main() {
             # Debian 12 WSL
             add_task "Install NVIDIA CUDA Toolkit" cuda_toolkit check_toolkit  # Skip if toolkit is installed
             add_task "Install NVIDIA cuDNN 8.9.7" install_cudnn check_cudnn_installed  # Skip if cuDNN is installed
+            add_task "Install Docker" install_docker_wsl check_docker_installed_wsl  # Skip if Docker is installed
             add_task "Install ffmpeg" install_ffmpeg check_ffmpeg_installed  # Skip if ffmpeg is installed
             add_task "Install golang" install_golang check_golang_installed  # Skip if golang is installed
             add_task "Install python3" install_python3 check_python3_installed  # Skip if python3 is installed
@@ -103,7 +105,7 @@ check_dependencies() {
         elif [ "$os_name" == "Ubuntu 22 WSL" ]; then
             # Ubuntu 22 WSL
             check_nvidia_driver || exit 1
-            check_docker_installed || exit 1
+            check_docker_installed_wsl || exit 1
             check_docker_nvidia || exit 1
             exit 1
         elif [ "$os_name" == "Debian 12" ]; then
@@ -115,7 +117,7 @@ check_dependencies() {
         elif [ "$os_name" == "Debian 12 WSL" ]; then
             # Debian 12 WSL
             check_toolkit || exit 1
-            check_docker_installed || exit 1
+            check_docker_installed_wsl || exit 1
             check_docker_nvidia || exit 1
             exit 1
         fi
@@ -137,6 +139,7 @@ check_dependencies() {
             # Ubuntu 22 WSL
             check_toolkit || exit 1
             check_cudnn_installed || exit 1
+            check_docker_installed_wsl || exit 1
             check_ffmpeg_installed || exit 1
             check_golang_installed || exit 1
             check_python3_installed || exit 1
@@ -157,6 +160,7 @@ check_dependencies() {
             # Debian 12 WSL
             check_toolkit || exit 1
             check_cudnn_installed || exit 1
+            check_docker_installed_wsl || exit 1
             check_ffmpeg_installed || exit 1
             check_golang_installed || exit 1
             check_python3_installed || exit 1
@@ -238,6 +242,54 @@ REBOOT_NEEDED=false
 #--------------------------  wsl  ---------------------------
 #<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
+check_docker_installed_wsl() {
+    # 1. Check if `docker` command is available
+    if ! command -v docker &> /dev/null; then
+        # echo "Docker is not installed (docker command not found)."
+        return 1
+    fi
+
+    # 2. Check if Docker Daemon is running
+    if ! docker info &> /dev/null; then
+        # echo "Docker is installed, but not running or not accessible."
+        return 1
+    fi
+
+    # echo "Docker is installed and running."
+    return 0
+}
+
+install_docker_wsl() {
+    tput clear > /dev/tty
+    tput cup 0 0 > /dev/tty
+    tput ed > /dev/tty
+    echo -e "\e[1;31m====================================== ATTENTION REQUIRED ======================================\e[0m" > /dev/tty
+    echo -e "\e[1;33mDocker is not installed or is not activated in this WSL instance\e[0m" > /dev/tty
+    echo -e "\e[1;33mPlease follow the steps below:\e[0m" > /dev/tty
+    echo -e "\e[1;32m1. Visit: \e[1;34mhttps://docs.docker.com/desktop/setup/install/windows-install/\e[0m" > /dev/tty
+    echo -e "\e[1;32m2. Download Docker Desktop for your system and install it.\e[0m" > /dev/tty
+    echo -e "\e[1;32m3. Start Docker Desktop\e[0m" > /dev/tty
+    echo -e "\e[1;32m4. Open the settings and go to: Resources > WSL integration\e[0m" > /dev/tty
+    echo -e "\e[1;34m   Enable integration for your WSL distro\e[0m" > /dev/tty
+    echo -e "\e[1;32m5. Hit Apply & restart\e[0m" > /dev/tty
+    echo -e "\e[1;32m \e[0m" > /dev/tty
+    echo -e "\e[1;33mMore Info: https://github.com/bigbluebutton-bot/bbb-translation-bot/tree/main/docs/wsl-docker.md\e[0m" > /dev/tty
+    echo -e "\e[1;31m================================================================================================\e[0m" > /dev/tty
+    echo -e "\e[1;33mWaiting for docker to start\e[0m" > /dev/tty
+
+
+    # Wait for a docker to be installed and running
+    while true; do
+        if check_docker_installed_wsl; then
+            break
+        fi
+        sleep 5
+    done
+
+    # Go back to the task screen
+    tput clear > /dev/tty
+    update_task_status
+}
 
 #>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 #--------------------------  wsl  ---------------------------
