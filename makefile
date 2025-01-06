@@ -1,7 +1,13 @@
 .PHONY: install install-dev build run run-dev run-dev-docker stop stop-dev stop-dev-docker
 
-# Define flags
-IS_WSL := $(shell grep -qi microsoft /proc/version && echo yes || echo no)
+help: check-not-root
+	@echo "Usage: make [option]"
+	@echo ""
+	@echo "Options:"
+	@echo "  run              Run all services"
+	@echo "  run-dev          Run all services for development"
+	@echo "  run-dev-docker   Run all services for development using docker-compose"
+	@echo "  stop             Stop all services"
 
 check-not-root:
 	@if [ "$$(id -u)" = "0" ]; then \
@@ -13,22 +19,12 @@ check-not-root:
 	  exit 1; \
 	fi
 
-all: check-not-root install
-
 install: check-not-root
-ifeq ($(IS_WSL), yes)
-	@./setup.sh --check || sudo ./setup.sh --wsl
-else
 	@./setup.sh --simple-setup --check || sudo ./setup.sh --simple-setup
-endif
 	@echo "All dependencies are installed"
 
 install-dev: check-not-root
-ifeq ($(IS_WSL), yes)
-	@./setup.sh --check || sudo ./setup.sh --wsl
-else
 	@./setup.sh --check || sudo ./setup.sh
-endif
 	@echo "All dependencies are installed"
 
 build: check-not-root
@@ -63,22 +59,51 @@ generate-env-files: check-not-root
 run: check-not-root generate-env-files install stop
 	@docker compose up -d
 
+	@screen -dmS bot bash -c "docker logs -f bot 2>&1 | tee logs/bot.log"
+	@screen -dmS changeset-service bash -c "docker logs -f changeset-service 2>&1 | tee logs/changeset-service.log"
+	@screen -dmS transcription-service bash -c "docker logs -f transcription-service 2>&1 | tee logs/transcription-service.log"
+	@screen -dmS translation-service bash -c "docker logs -f translation-service 2>&1 | tee logs/translation-service.log"
+	@screen -dmS prometheus bash -c "docker logs -f prometheus 2>&1 | tee logs/prometheus.log"
+
+	@echo "------------------------------------------------------"
+	@echo "All services are running in the background."
+	@echo "The logs are available in the logs/ directory."
+	@echo "------------------------------------------------------"
+
 run-dev: check-not-root generate-env-files install-dev stop build
 	@docker compose -f docker-compose-dev.yml up --no-start
 	@screen -dmS bot bash -c "cd bot && set -a && source ../.env-dev && set +a && go run . 2>&1 | tee ../logs/bot.log"
-	@screen -dmS changeset-grpc bash -c "cd changeset-grpc && set -a && source ../.env-dev && set +a && npm run start 2>&1 | tee ../logs/changeset-grpc.log"
+	@screen -dmS changeset-service bash -c "cd changeset-grpc && set -a && source ../.env-dev && set +a && npm run start 2>&1 | tee ../logs/changeset-service.log"
 	@screen -dmS transcription-service bash -c "cd transcription-service && source .venv/bin/activate && set -a && source ../.env-dev && set +a && python main.py 2>&1 | tee ../logs/transcription-service.log"
 	@screen -dmS translation-service bash -c "docker compose -f docker-compose-dev.yml up translation-service 2>&1 | tee logs/translation-service.log"
 	@screen -dmS prometheus bash -c "docker compose -f docker-compose-dev.yml up prometheus  2>&1 | tee logs/prometheus.log"
 
-run-dev-docker: check-not-root generate-env-files install-dev stop
+	@echo "------------------------------------------------------"
+	@echo "All services are running in the background."
+	@echo "The logs are available in the logs/ directory."
+	@echo "More detailed logs of the transcription-service are available in transcription-service/logs/."
+	@echo "------------------------------------------------------"
+
+run-dev-docker: check-not-root generate-env-files install-dev stop build
 	@docker compose -f docker-compose-dev.yml up -d --build
+
+	@screen -dmS bot bash -c "docker logs -f bot 2>&1 | tee logs/bot.log"
+	@screen -dmS changeset-service bash -c "docker logs -f changeset-service 2>&1 | tee logs/changeset-service.log"
+	@screen -dmS transcription-service bash -c "docker logs -f transcription-service 2>&1 | tee logs/transcription-service.log"
+	@screen -dmS translation-service bash -c "docker logs -f translation-service 2>&1 | tee logs/translation-service.log"
+	@screen -dmS prometheus bash -c "docker logs -f prometheus 2>&1 | tee logs/prometheus.log"
+
+	@echo "------------------------------------------------------"
+	@echo "All services are running in the background."
+	@echo "The logs are available in the logs/ directory."
+	@echo "More detailed logs of the transcription-service are available in transcription-service/logs/."
+	@echo "------------------------------------------------------"
 
 stop: check-not-root stop-dev stop-dev-docker
 	@docker compose down
 
 stop-dev: check-not-root
-	@for service in bot changeset-grpc transcription-service; do \
+	@for service in bot changeset-service transcription-service; do \
 		screen -ls | grep ".$$service" | awk '{print $$1}' | while read session; do \
 			echo "Stopping screen session $$session..."; \
 			screen -S $$session -X quit; \
