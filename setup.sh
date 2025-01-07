@@ -28,7 +28,7 @@ main() {
             # Debian 12
             add_task "Install NVIDIA Drivers" nvidia_install_debian check_nvidia_driver_debian  # Skip if drivers are installed
             add_task "Install NVIDIA CUDA" cuda_install_debian check_cuda_installed_debian  # Skip if CUDA is installed
-            add_task "Install NVIDIA CUDA Toolkit" cuda_toolkit check_toolkit  # Skip if toolkit is installed
+            add_task "Install NVIDIA CUDA Toolkit" cuda_toolkit_debian check_toolkit_debian  # Skip if toolkit is installed
             add_task "Reboot" configure_reboot_simple check_reboot_configured_simple  # Skip if reboot is needed
             add_task "Install Docker" install_docker check_docker_installed  # Skip if Docker is installed
             add_task "Install Docker with NVIDIA support" install_docker_nvidia check_docker_nvidia  # Skip if Docker with NVIDIA support is installed
@@ -64,7 +64,7 @@ main() {
             # Debian 12
             add_task "Install NVIDIA Drivers" nvidia_install_debian check_nvidia_driver_debian  # Skip if drivers are installed
             add_task "Install NVIDIA CUDA" cuda_install_debian check_cuda_installed_debian  # Skip if CUDA is installed
-            add_task "Install NVIDIA CUDA Toolkit" cuda_toolkit check_toolkit  # Skip if toolkit is installed
+            add_task "Install NVIDIA CUDA Toolkit" cuda_toolkit_debian check_toolkit_debian  # Skip if toolkit is installed
             add_task "Install NVIDIA cuDNN 8.9.7" install_cudnn check_cudnn_installed  # Skip if cuDNN is installed
             add_task "Reboot" configure_reboot_ubuntu22 check_reboot_configured_ubuntu22  # Skip if reboot is needed
             add_task "Install Docker" install_docker check_docker_installed  # Skip if Docker is installed
@@ -75,7 +75,7 @@ main() {
             add_task "Install nodejs" install_nodejs check_nodejs_installed  # Skip if nodejs is installed
         elif [ "$os_name" == "Debian 12 WSL" ]; then
             # Debian 12 WSL
-            add_task "Install NVIDIA CUDA Toolkit" cuda_toolkit check_toolkit  # Skip if toolkit is installed
+            add_task "Install NVIDIA CUDA Toolkit" cuda_toolkit_debian check_toolkit_debian  # Skip if toolkit is installed
             add_task "Install NVIDIA cuDNN 8.9.7" install_cudnn check_cudnn_installed  # Skip if cuDNN is installed
             add_task "Install Docker" install_docker_wsl check_docker_installed_wsl  # Skip if Docker is installed
             add_task "Install ffmpeg" install_ffmpeg check_ffmpeg_installed  # Skip if ffmpeg is installed
@@ -454,6 +454,8 @@ check_cudnn_installed() {
 }
 
 install_cudnn() {
+    os_name=$(get_os)
+
     tput clear > /dev/tty
     tput cup 0 0 > /dev/tty
     tput ed > /dev/tty
@@ -463,6 +465,12 @@ install_cudnn() {
     echo -e "\e[1;32m1. Visit: \e[1;34mhttps://developer.nvidia.com/rdp/cudnn-archive\e[0m" > /dev/tty
     echo -e "\e[1;32m2. Download the appropriate installer for your system.\e[0m" > /dev/tty
     echo -e "\e[1;34m  (Download cuDNN v8.9.7 (December 5th, 2023), for CUDA 12.x)\e[0m" > /dev/tty
+    
+    if [ "$os_name" == "Debian 12" ] || [ "$os_name" == "Debian 12 WSL" ]; then
+        echo -e "\e[1;34m   You can downloade Local Installer for Debian 11 (Deb) for Debian 12\e[0m" > /dev/tty
+    fi
+
+
     echo -e "\e[1;32m3. Place the downloaded file in this directory.\e[0m" > /dev/tty
     echo -e "\e[1;34m  (Filename: cudnn*.deb)\e[0m" > /dev/tty
     echo -e "\e[1;33mThe script will continue automatically once the correct file is detected.\e[0m" > /dev/tty
@@ -756,7 +764,7 @@ export NVM_DIR="$HOME/.nvm"
     # Source NVM directly, then install and use Node
     sudo -u "$SUDO_USER" bash -c "export NVM_DIR=\"$USER_HOME/.nvm\" && [ -s \"$USER_HOME/.nvm/nvm.sh\" ] && \. \"$USER_HOME/.nvm/nvm.sh\" && nvm install node && nvm use node"
 
-    echo "Node.js and NVM installed for $SUDO_USER. NVM and Node should now be available. Pls typpe 'source ~/.bashrc' to use Node.js"
+    echo "Node.js and NVM installed for $SUDO_USER. NVM and Node should now be available. Pls type 'source ~/.bashrc' to use Node.js"
 }
 
 
@@ -869,6 +877,28 @@ cuda_install_debian() {
 
     # Flag for reboot
     REBOOT_NEEDED=true
+}
+#------------------------------------------------------------
+
+#------------------------------------------------------------
+# Function to check if the CUDA Toolkit is already installed
+check_toolkit_debian() {
+    if dpkg -l | grep -qw nvidia-cuda-toolkit; then
+        echo "CUDA Toolkit is already installed."
+        return 0
+    else
+        return 1
+    fi
+}
+
+# Function to install the CUDA Toolkit
+cuda_toolkit_debian() {
+    echo "Enabling non-free repository and updating package lists..."
+    # Enable non-free repository
+    sed -i '/^deb .*bookworm main/s/$/ contrib non-free non-free-firmware/' /etc/apt/sources.list
+    apt update
+
+    apt install -y nvidia-cuda-toolkit nvtop
 }
 #------------------------------------------------------------
 
