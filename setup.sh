@@ -24,7 +24,6 @@ main() {
         elif [ "$os_name" == "Ubuntu 22 WSL" ]; then
             # Ubuntu 22 WSL
             add_task "Install Docker" install_docker_wsl check_docker_installed_wsl  # Skip if Docker is installed
-            exit 1
         elif [ "$os_name" == "Debian 12" ]; then
             # Debian 12
             add_task "Install NVIDIA Drivers" nvidia_install_debian check_nvidia_driver_debian  # Skip if drivers are installed
@@ -36,7 +35,6 @@ main() {
         elif [ "$os_name" == "Debian 12 WSL" ]; then
             # Debian 12 WSL
             add_task "Install Docker" install_docker_wsl check_docker_installed_wsl  # Skip if Docker is installed
-            exit 1
         fi
     else
         # Full setup
@@ -93,6 +91,7 @@ main() {
 
 CHECK_DEPENDENCIES=false
 check_dependencies() {
+    os_name=$(get_os)
     # Simple setup
     if $INSTALL_SIMPLE_SETUP; then
         if [ "$os_name" == "Ubuntu 22" ]; then
@@ -107,7 +106,6 @@ check_dependencies() {
             check_nvidia_driver || exit 1
             check_docker_installed_wsl || exit 1
             check_docker_nvidia || exit 1
-            exit 1
         elif [ "$os_name" == "Debian 12" ]; then
             # Debian 12
             check_nvidia_driver_debian || exit 1
@@ -119,7 +117,6 @@ check_dependencies() {
             check_toolkit || exit 1
             check_docker_installed_wsl || exit 1
             check_docker_nvidia || exit 1
-            exit 1
         fi
     else
         # Full setup
@@ -389,7 +386,7 @@ cuda_install() {
     if [[ -n "$SUDO_USER" ]]; then
         ORIGINAL_USER_HOME=$(eval echo ~$SUDO_USER)
         ORIGINAL_USER_BASHRC="$ORIGINAL_USER_HOME/.bashrc"
-        
+
         # Update .bashrc for the original user
         if ! grep -q '/usr/local/cuda-12.0/bin' "$ORIGINAL_USER_BASHRC"; then
             echo 'export PATH=/usr/local/cuda-12.0/bin:$PATH' >> "$ORIGINAL_USER_BASHRC"
@@ -855,7 +852,7 @@ cuda_install_debian() {
     if [[ -n "$SUDO_USER" ]]; then
         ORIGINAL_USER_HOME=$(eval echo ~$SUDO_USER)
         ORIGINAL_USER_BASHRC="$ORIGINAL_USER_HOME/.bashrc"
-        
+
         # Update .bashrc for the original user
         if ! grep -q '/usr/local/cuda-12.0/bin' "$ORIGINAL_USER_BASHRC"; then
             echo 'export PATH=/usr/local/cuda-12.0/bin:$PATH' >> "$ORIGINAL_USER_BASHRC"
