@@ -19,6 +19,22 @@ check-not-root:
 	  exit 1; \
 	fi
 
+check-docker-rights:
+	@if [ $$(id -nG | grep -cw docker) -eq 0 ]; then \
+		tput clear > /dev/tty; \
+		tput cup 0 0 > /dev/tty; \
+		tput ed > /dev/tty; \
+		echo "\e[1;31m========================= ATTENTION REQUIRED =========================\e[0m" > /dev/tty; \
+		echo "\e[1;33mThis user is not in the docker group.\e[0m" > /dev/tty; \
+		echo "\e[1;33mPlease follow the steps below:\e[0m" > /dev/tty; \
+		echo "\e[1;32m1. Run: \e[1;34msudo usermod -aG docker $$USER\e[0m" > /dev/tty; \
+		echo "\e[1;32m2. Reopen your current session.\e[0m" > /dev/tty; \
+		echo "\e[1;34m   (If you are using VS Code, restart VS Code)\e[0m" > /dev/tty; \
+		echo "\e[1;32m3. Rerun the makefile.\e[0m" > /dev/tty; \
+		echo "\e[1;31m======================================================================\e[0m" > /dev/tty; \
+		exit 1; \
+	fi
+
 install: check-not-root
 	@./setup.sh --simple-setup --check || sudo ./setup.sh --simple-setup
 	@echo "All dependencies are installed"
@@ -56,7 +72,7 @@ generate-env-files: check-not-root
 	fi
 
 
-run: check-not-root generate-env-files install stop
+run: check-not-root generate-env-files install check-docker-rights stop
 	@docker compose up -d
 
 	@screen -dmS bot bash -c "docker logs -f bot 2>&1 | tee logs/bot.log"
@@ -70,7 +86,7 @@ run: check-not-root generate-env-files install stop
 	@echo "The logs are available in the logs/ directory."
 	@echo "------------------------------------------------------"
 
-run-dev: check-not-root generate-env-files install-dev stop build
+run-dev: check-not-root generate-env-files install-dev check-docker-rights stop build
 	@docker compose -f docker-compose-dev.yml up --no-start
 	@screen -dmS bot bash -c "cd bot && set -a && source ../.env-dev && set +a && go run . 2>&1 | tee ../logs/bot.log"
 	@screen -dmS changeset-service bash -c "cd changeset-grpc && set -a && source ../.env-dev && set +a && npm run start 2>&1 | tee ../logs/changeset-service.log"
@@ -84,7 +100,7 @@ run-dev: check-not-root generate-env-files install-dev stop build
 	@echo "More detailed logs of the transcription-service are available in transcription-service/logs/."
 	@echo "------------------------------------------------------"
 
-run-dev-docker: check-not-root generate-env-files install-dev stop build
+run-dev-docker: check-not-root generate-env-files install-dev check-docker-rights stop build
 	@docker compose -f docker-compose-dev.yml up -d --build
 
 	@screen -dmS bot bash -c "docker logs -f bot 2>&1 | tee logs/bot.log"
@@ -99,10 +115,10 @@ run-dev-docker: check-not-root generate-env-files install-dev stop build
 	@echo "More detailed logs of the transcription-service are available in transcription-service/logs/."
 	@echo "------------------------------------------------------"
 
-stop: check-not-root stop-dev stop-dev-docker
+stop: check-not-root check-docker-rights stop-dev stop-dev-docker
 	@docker compose down
 
-stop-dev: check-not-root
+stop-dev: check-not-root check-docker-rights
 	@for service in bot changeset-service transcription-service; do \
 		screen -ls | grep ".$$service" | awk '{print $$1}' | while read session; do \
 			echo "Stopping screen session $$session..."; \
@@ -112,5 +128,5 @@ stop-dev: check-not-root
 	@echo "Stopping translation-service..."; docker compose -f docker-compose-dev.yml down translation-service
 	@echo "Stopping prometheus..."; docker compose -f docker-compose-dev.yml down prometheus
 
-stop-dev-docker: check-not-root
+stop-dev-docker: check-not-root check-docker-rights
 	@docker compose -f docker-compose-dev.yml down
