@@ -103,9 +103,7 @@ check_dependencies() {
             check_docker_nvidia || exit 1
         elif [ "$os_name" == "Ubuntu 22 WSL" ]; then
             # Ubuntu 22 WSL
-            check_nvidia_driver || exit 1
             check_docker_installed_wsl || exit 1
-            check_docker_nvidia || exit 1
         elif [ "$os_name" == "Debian 12" ]; then
             # Debian 12
             check_nvidia_driver_debian || exit 1
@@ -114,9 +112,7 @@ check_dependencies() {
             check_docker_nvidia || exit 1
         elif [ "$os_name" == "Debian 12 WSL" ]; then
             # Debian 12 WSL
-            check_toolkit || exit 1
             check_docker_installed_wsl || exit 1
-            check_docker_nvidia || exit 1
         fi
     else
         # Full setup
@@ -465,7 +461,7 @@ install_cudnn() {
     echo -e "\e[1;32m1. Visit: \e[1;34mhttps://developer.nvidia.com/rdp/cudnn-archive\e[0m" > /dev/tty
     echo -e "\e[1;32m2. Download the appropriate installer for your system.\e[0m" > /dev/tty
     echo -e "\e[1;34m  (Download cuDNN v8.9.7 (December 5th, 2023), for CUDA 12.x)\e[0m" > /dev/tty
-    
+
     if [ "$os_name" == "Debian 12" ] || [ "$os_name" == "Debian 12 WSL" ]; then
         echo -e "\e[1;34m   You can downloade Local Installer for Debian 11 (Deb) for Debian 12\e[0m" > /dev/tty
     fi
