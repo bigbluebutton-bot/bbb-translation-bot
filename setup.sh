@@ -523,6 +523,9 @@ check_docker_installed() {
 
 install_docker() {
     curl -sSL https://get.docker.com | sh
+    if [[ -n "$SUDO_USER" ]]; then
+        usermod -aG docker $SUDO_USER
+    fi
 }
 #------------------------------------------------------------
 
