@@ -785,7 +785,7 @@ export NVM_DIR="$HOME/.nvm"
 #>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
 #------------------------------------------------------------
-# 1. Install NVIDIA Drivers
+# 1. Check if NVIDIA driver is installed
 check_nvidia_driver_debian() {
     if lsmod | grep -q 'nvidia'; then
         return 0  # NVIDIA driver is installed
@@ -794,26 +794,46 @@ check_nvidia_driver_debian() {
     fi
 }
 
-# Function to install NVIDIA driver on Debian 12
+# 2. Install NVIDIA driver on Debian
 nvidia_install_debian() {
-    # Install necessary packages
-    apt install -y "linux-headers-$(uname -r)" build-essential dkms
-
-    # Enable non-free repositories if not already enabled
-    if ! grep -q 'non-free' /etc/apt/sources.list; then
-        echo "Enabling non-free repositories..."
-        sed -i '/^deb/s/$/ non-free/' /etc/apt/sources.list
-        apt update
+    # Ensure 'apt-get' is available
+    if ! command -v apt-get &> /dev/null; then
+        echo "Installing software-properties-common..."
+        apt-get install -y software-properties-common
     fi
 
-    # Install NVIDIA driver
-    apt install -y nvidia-driver
+    # Update & upgrade
+    apt-get update -y
+    apt-get upgrade -y
+
+    # Enable non-free repository (including contrib if needed)
+    apt-add-repository -y non-free
+
+    # Install nvidia-detect if not installed
+    if ! command -v nvidia-detect &> /dev/null; then
+        apt-get install -y nvidia-detect
+    fi
+
+    # Get GPU info and recommended driver package
+    gpu_info=$(nvidia-detect)
+    driver_package=$(echo "$gpu_info" | awk -F': ' '/recommended driver package/ { print $2 }')
+
+    # If no recommended package found or unsupported GPU
+    if [ -z "$driver_package" ]; then
+        echo -e "❌ The script is unable to install the NVIDIA driver. You have to manually install it and rerunn this script." > /dev/tty
+        return 1
+    fi
+
+    # Install the recommended driver package
+    apt-get install -y "$driver_package"
 
     # Blacklist nouveau driver
     echo -e "blacklist nouveau\noptions nouveau modeset=0" | tee /etc/modprobe.d/blacklist-nouveau.conf
+
+    # Rebuild initramfs
     update-initramfs -u
 
-    # Inform the user to reboot
+    # Signal that a reboot is likely needed
     REBOOT_NEEDED=true
 }
 #------------------------------------------------------------
