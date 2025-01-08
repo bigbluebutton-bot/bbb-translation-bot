@@ -166,6 +166,7 @@ check_dependencies() {
 # Capture parameters
 INSTALL_SIMPLE_SETUP=false
 STARTED_BY_CRONJOB=false
+FORCE_INSTALL=false
 
 # Display help function
 show_help() {
@@ -177,6 +178,7 @@ show_help() {
     echo "  --simple-setup Perform a simple setup"
     echo "  --help         Show this help message and exit"
     echo "  --check        Check all dependencies are already installed. You can use it with --simple-setup"
+    echo "  --force        Force the installation of all dependencies. It will ignore errors and continue with the installation"
     exit 0
 }
 
@@ -199,6 +201,9 @@ while [[ "$1" != "" ]]; do
             ;;
         --check)
             CHECK_DEPENDENCIES=true
+            ;;
+        --force)
+            FORCE_INSTALL=true
             ;;
         --help)
             show_help
@@ -799,19 +804,19 @@ nvidia_install_debian() {
     # Ensure 'apt-get' is available
     if ! command -v apt-get &> /dev/null; then
         echo "Installing software-properties-common..."
-        apt-get install -y software-properties-common
+        apt install -y software-properties-common
     fi
 
     # Update & upgrade
-    apt-get update -y
-    apt-get upgrade -y
+    apt update
+    apt install software-properties-common -y
 
     # Enable non-free repository (including contrib if needed)
     apt-add-repository -y non-free
 
     # Install nvidia-detect if not installed
     if ! command -v nvidia-detect &> /dev/null; then
-        apt-get install -y nvidia-detect
+        apt install -y nvidia-detect
     fi
 
     # Get GPU info and recommended driver package
@@ -820,12 +825,12 @@ nvidia_install_debian() {
 
     # If no recommended package found or unsupported GPU
     if [ -z "$driver_package" ]; then
-        echo -e "❌ The script is unable to install the NVIDIA driver. You have to manually install it and rerunn this script." > /dev/tty
+        echo "❌ The script is unable to install the NVIDIA driver. You have to manually install it and rerunn this script."
         return 1
     fi
 
     # Install the recommended driver package
-    apt-get install -y "$driver_package"
+    apt install -y "$driver_package"
 
     # Blacklist nouveau driver
     echo -e "blacklist nouveau\noptions nouveau modeset=0" | tee /etc/modprobe.d/blacklist-nouveau.conf
@@ -1068,7 +1073,9 @@ run_task() {
     if [ $? -ne 0 ]; then
         TASK_STATUSES["$task_name"]="error"
         update_task_status
-        exit_with_error
+        if [ "$FORCE_INSTALL" = false ]; then
+            exit_with_error
+        fi
     else
         TASK_STATUSES["$task_name"]="done"
     fi
