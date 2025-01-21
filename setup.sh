@@ -1157,8 +1157,11 @@ reboot_now() {
         echo "@reboot root /usr/bin/screen -dmS $SCREEN_NAME /bin/bash $FULL_PATH_OF_THIS_SCRIPT --cron $REBOOT_OPTIONS --user $ORGINAL_USER" >> /etc/crontab
     fi
 
-    # Add a login hint
-    cat << EOF > "$LOGIN_HINT_FILE"
+    # Add a login hint only if there is no desktop installed. A desktop will cause login issues.
+    if ! dpkg -l | grep -E 'ubuntu-desktop|gnome-session|kde-standard|xfce4|mate-desktop|cinnamon-desktop|lxde-core|lxqt-core' > /dev/null 2>&1
+    then
+        # Add a login hint
+        cat << EOF > "$LOGIN_HINT_FILE"
 #!/bin/bash
 
 clear
@@ -1244,7 +1247,8 @@ echo "╝"
 
 EOF
 
-    chmod +x "$LOGIN_HINT_FILE"
+        chmod +x "$LOGIN_HINT_FILE"
+    fi
     sleep 5
     reboot now
 }
