@@ -92,6 +92,7 @@ main() {
 CHECK_DEPENDENCIES=false
 check_dependencies() {
     os_name=$(get_os)
+    echo "$os_name"
     # Simple setup
     if $INSTALL_SIMPLE_SETUP; then
         if [ "$os_name" == "Ubuntu 22" ]; then
@@ -575,8 +576,10 @@ check_golang_installed() {
     go_version=$(curl -s https://go.dev/VERSION?m=text | head -n 1 | sed 's/^go//')
     export PATH=$PATH:/usr/local/go/bin
     if command -v go &> /dev/null && [[ "$(go version)" == *"go$go_version"* ]]; then
+        echo "Go $go_version is installed."
         return 0
     else
+        echo "Go $go_version is not installed or the version is different. Detected version: $(go version)"
         return 1
     fi
 }
@@ -793,8 +796,10 @@ export NVM_DIR="$HOME/.nvm"
 # 1. Check if NVIDIA driver is installed
 check_nvidia_driver_debian() {
     if lsmod | grep -q 'nvidia'; then
+        echo "NVIDIA driver is installed."
         return 0  # NVIDIA driver is installed
     else
+        echo "NVIDIA driver is not installed."
         return 1  # NVIDIA driver is not installed
     fi
 }
@@ -845,10 +850,11 @@ nvidia_install_debian() {
 
 #------------------------------------------------------------
 # 2. Install CUDA 12
-check_cuda_debian() {
+check_cuda_installed_debian() {
     if command -v nvcc &> /dev/null; then
         return 0  # CUDA is installed
     else
+        
         return 1  # CUDA is not installed
     fi
 }
