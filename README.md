@@ -1,6 +1,8 @@
 # 🚀 BBB-Translation-Bot
 
-**BBB-Translation-Bot** enhances communication in [BigBlueButton (BBB)](https://bigbluebutton.org/) meetings by providing real-time transcription and translation services. Using OpenAI's [Whisper](https://github.com/openai/whisper) AI, the bot joins a BBB meeting's audio channel to transcribe and translate spoken words into text, seamlessly integrating the transcripts into BBB's closed captions feature. 📝🌐
+**BBB-Translation-Bot** helps with communication in [BigBlueButton (BBB)](https://bigbluebutton.org/) meetings by providing **real-time transcription and translation**. The bot listens to the meeting’s audio, turns spoken words into text, and shows translations using a self-hosted version of [Whisper AI](https://github.com/openai/whisper) ([faster-whisper](https://github.com/SYSTRAN/faster-whisper)) and [LibreTranslate](https://libretranslate.com/). It automatically adds the text as closed captions in BBB. 📝🌐
+
+> **‼️🚨--> This project only works with BBB 2.x <--🚨‼️**
 
 ---
 
