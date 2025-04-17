@@ -28,6 +28,8 @@ create_file_if_not_exists() {
 
 # Generate the .env file. This will be used by docker (docker-compose.yaml)
 ENV_CONTENT=$(cat <<EOF
+BOT_LIMIT="1"
+
 BBB_API_URL="https://$DOMAIN/bigbluebutton/api/"
 BBB_API_SECRET="$SECRET"
 BBB_API_SHA="SHA256"
@@ -81,6 +83,8 @@ EOF
 
 # Generate the dev environment file
 ENV_CONTENT_DEV=$(cat <<EOF
+BOT_LIMIT="1"
+
 BBB_API_URL="https://$DOMAIN/bigbluebutton/api/"
 BBB_API_SECRET="$SECRET"
 BBB_API_SHA="SHA256"
@@ -134,6 +138,8 @@ EOF
 
 # Generate the docker dev file
 ENV_CONTENT_DEV_DOCKER=$(cat <<EOF
+BOT_LIMIT="1"
+
 BBB_API_URL="https://$DOMAIN/bigbluebutton/api/"
 BBB_API_SECRET="$SECRET"
 BBB_API_SHA="SHA256"

@@ -13,6 +13,9 @@ import (
 
 // Settings holds the configuration settings
 type Settings struct {
+	Bot struct {
+		Limit int
+	}
 	BBB struct {
 		API struct {
 			URL    string
@@ -87,6 +90,8 @@ func LoadSettings() (*Settings, error) {
 	}
 
 	// Assign all settings
+	cfg.Bot.Limit = mustInt("BOT_LIMIT")
+
 	cfg.BBB.API.URL = mustString("BBB_API_URL")
 	cfg.BBB.API.Secret = mustString("BBB_API_SECRET")
 	cfg.BBB.API.SHA = api.SHA(mustString("BBB_API_SHA"))

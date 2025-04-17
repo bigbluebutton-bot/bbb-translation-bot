@@ -105,7 +105,7 @@ func (bm *BotManager) AddBot() (*Bot, error) {
 	bm.lock.Lock()
 	defer bm.lock.Unlock()
 
-	bm.bots[new_bot.id] = new_bot
+	bm.bots[new_bot.Id] = new_bot
 
 	return new_bot, nil
 }
@@ -137,6 +137,16 @@ func (bm *BotManager) GetBots() map[string]*Bot {
 	return bm.bots
 }
 
+
+
+
+
+
+
+
+
+
+
 // enum task [transcribe, translate]
 type Task int
 
@@ -154,10 +164,11 @@ const (
 )
 
 type Bot struct {
-	id           string
-	status       StatusType
+	Id           string		`json:"id"`
+	Status       StatusType	`json:"status"`
 	client       *bbbbot.Client
-	clients      []*bbbbot.Client
+	clients      map[string]*bbbbot.Client // map of language and client
+	Languages   []string		`json:"languages"`
 	clientsMutex sync.Mutex
 	streamclient *StreamClient
 	audioclient  *bbbbot.AudioClient
@@ -178,10 +189,10 @@ type Bot struct {
 	changeset_external     bool
 	changeset_port         int
 	changeset_host         string
-	task                   Task
+	Task                   Task	`json:"task"`
 
-	meetingID string
-	userName  string
+	MeetingID string	`json:"meeting_id"`
+	UserName  string	`json:"user_name"`
 	moderator bool
 }
 
@@ -219,11 +230,11 @@ func NewBot(
 
 	// Create obj
 	return &Bot{
-		id:           uuid.New().String(),
-		status:       Disconnected,
-		task:         task,
+		Id:           uuid.New().String(),
+		Status:       Disconnected,
+		Task:         task,
 		client:       client,
-		clients:      make([]*bbbbot.Client, 0),
+		clients:      make(map[string]*bbbbot.Client),
 		streamclient: streamclient,
 		audioclient:  client.CreateAudioChannel(),
 		oggFile:      nil,
@@ -241,8 +252,8 @@ func NewBot(
 		changeset_host:         changeset_host,
 		changeset_external:     changeset_external,
 
-		meetingID: "",
-		userName:  "",
+		MeetingID: "",
+		UserName:  "",
 		moderator: true,
 	}
 }
@@ -251,23 +262,23 @@ func (b *Bot) Join(
 	meetingID string,
 	UserName string,
 ) error {
-	if b.status == Connecting {
+	if b.Status == Connecting {
 		// return error connecting
 		return fmt.Errorf("already connecting")
 	}
 
-	if b.status == Connected {
+	if b.Status == Connected {
 		b.Disconnect()
 	}
-	b.status = Connecting
+	b.Status = Connecting
 	defer func() {
-		b.status = Connected
+		b.Status = Connected
 	}()
 
-	b.meetingID = meetingID
-	b.userName = UserName
+	b.MeetingID = meetingID
+	b.UserName = UserName
 
-	err := b.client.Join(b.meetingID, b.userName, b.moderator)
+	err := b.client.Join(b.MeetingID, b.UserName, b.moderator)
 	if err != nil {
 		return err
 	}
@@ -295,7 +306,7 @@ func (b *Bot) Join(
 		fmt.Println("TCP message event:", text)
 		validtext := strings.ToValidUTF8(text, "")
 
-		if b.task == Transcribe {
+		if b.Task == Transcribe {
 			// use the english capture
 			captures := b.client.GetCaptures()
 			for _, capture := range captures {
@@ -306,7 +317,7 @@ func (b *Bot) Join(
 					}
 				}
 			}
-		} else if b.task == Translate {
+		} else if b.Task == Translate {
 			// use the english capture to set the text
 			captures := b.client.GetCaptures()
 			for _, capture := range captures {
@@ -318,39 +329,19 @@ func (b *Bot) Join(
 				}
 			}
 			// use the other captures to set the text
-			captures = b.client.GetCaptures()
-			for _, capture := range captures {
-				if capture.ShortLanguageName != "en" {
-					translatedText, err := translate(b.translation_server_url, validtext, "en", capture.ShortLanguageName)
-					if err != nil {
-						fmt.Println("Error in translation:", err)
-					}
-					err = capture.SetText(translatedText)
-					if err != nil {
-						fmt.Println("Error in pad write:", err)
-					}
-				}
-			}
-		}
-
-		b.clientsMutex.Lock()
-		clientsTemp := b.clients
-		b.clientsMutex.Unlock()
-		if clientsTemp != nil {
-			for _, cl := range clientsTemp {
-				pads := cl.GetCaptures()
-				for _, pad := range pads {
-					translatedText := validtext
-					var err error
-					if pad.ShortLanguageName != "en" {
-						translatedText, err = translate(b.translation_server_url, validtext, "en", pad.ShortLanguageName)
+			clients := b.clients
+			for _, client := range clients {
+				captures = client.GetCaptures()
+				for _, capture := range captures {
+					if capture.ShortLanguageName != "en" {
+						translatedText, err := translate(b.translation_server_url, validtext, "en", capture.ShortLanguageName)
 						if err != nil {
 							fmt.Println("Error in translation:", err)
 						}
-					}
-					err = pad.SetText(translatedText)
-					if err != nil {
-						fmt.Println("Error in pad write:", err)
+						err = capture.SetText(translatedText)
+						if err != nil {
+							fmt.Println("Error in pad write:", err)
+						}
 					}
 				}
 			}
@@ -413,6 +404,10 @@ func (b *Bot) Join(
 				}
 
 				if err := b.oggFile.WriteRTP(rtpPacket); err != nil {
+					if *status == bbbbot.DISCONNECTED {
+						return
+					}
+
 					fmt.Println("Error during OGG file write:", err)
 					return
 				}
@@ -442,20 +437,26 @@ func (b *Bot) Disconnect() {
 	for _, cl := range b.clients {
 		cl.Leave()
 	}
-	b.clients = b.clients[:0]
+	for k := range b.clients {
+		delete(b.clients, k)
+	}
 	b.clientsMutex.Unlock()
 }
 
 func (b *Bot) Translate(
 	targetLang string,
 ) error {
-	if b.status == Connecting {
+	if b.Status == Connecting {
 		// return error connecting
 		return fmt.Errorf("bot is connecting")
 	}
 
-	if b.status == Disconnected {
+	if b.Status == Disconnected {
 		return fmt.Errorf("bot is disconnected")
+	}
+
+	if b.Task != Translate {
+		return fmt.Errorf("bot is not in translate mode")
 	}
 
 	// create a new client, join meeting and create capture
@@ -473,7 +474,7 @@ func (b *Bot) Translate(
 	}
 
 	// join the meeting
-	new_client.Join(b.meetingID, b.userName+"-"+targetLang, b.moderator)
+	new_client.Join(b.MeetingID, b.UserName+"-"+targetLang, b.moderator)
 
 	// create a new capture
 	_, err = new_client.CreateCapture(bbbbot.Language(targetLang), b.changeset_external, b.changeset_host, b.changeset_port)
@@ -483,8 +484,77 @@ func (b *Bot) Translate(
 
 	// add new client to the list of clients
 	b.clientsMutex.Lock()
-	b.clients = append(b.clients, new_client)
+	b.clients[targetLang] = new_client
+	b.Languages = append(b.Languages, targetLang)
 	b.clientsMutex.Unlock()
 
 	return nil
+}
+
+func (b *Bot) GetAllActiveTranslations() []string {
+	return b.Languages
+}
+
+func removeString(slice []string, strToRemove string) []string {
+	// Create a new slice to store the result
+	var result []string
+
+	// Iterate over the slice and add all elements except the one to be removed
+	for _, str := range slice {
+		if str != strToRemove {
+			result = append(result, str)
+		}
+	}
+
+	return result
+}
+
+func (b *Bot) StopTranslate(
+	targetLang string,
+) error {
+	b.clientsMutex.Lock()
+	defer b.clientsMutex.Unlock()
+
+	if client, ok := b.clients[targetLang]; ok {
+		client.Leave()
+		delete(b.clients, targetLang)
+		b.Languages = removeString(b.Languages, targetLang)
+		return nil
+	}
+	return fmt.Errorf("client not found")
+}
+
+func (b *Bot) GetTask() Task {
+	return b.Task
+}
+
+func (b *Bot) SetTask(task Task) {
+	if b.Task == Translate && task == Transcribe {
+		// stop all clients
+		for _, cl := range b.clients {
+			cl.Leave()
+		}
+	}
+
+	if b.Task == Transcribe && task == Translate {
+		all_languages := b.GetAllActiveTranslations()
+
+		// stop all clients
+		for k := range b.clients {
+			delete(b.clients, k)
+		}
+
+		b.Task = task
+
+		// start all clients
+		for _, lang := range all_languages {
+			fmt.Println("Starting translation for language:", lang)
+			err := b.Translate(lang)
+			if err != nil {
+				fmt.Println("Error in translate:", err)
+			}
+		}
+	}
+
+	b.Task = task
 }

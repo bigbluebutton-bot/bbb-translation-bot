@@ -44,6 +44,10 @@
     .button-group button {
         margin-right: 5px;
     }
+    .max-bots-reached {
+        background-color: gray;
+        cursor: not-allowed;
+    }
 </style>
 </head>
 <body>
@@ -55,18 +59,6 @@
     <span id="botMeetingInfo" style="display: none;">Current Meeting: <span id="botMeetingID"></span></span>
 </div>
 
-<h2>Create a New Meeting</h2>
-<form class="create-meeting-form" id="createMeetingForm">
-    <input type="text" id="newMeetingName" placeholder="Meeting Name" required/>
-    <input type="text" id="newMeetingID" placeholder="Meeting ID" required/>
-    <input type="text" id="newAttendeePW" placeholder="Attendee PW" required/>
-    <input type="text" id="newModeratorPW" placeholder="Moderator PW" required/>
-    <input type="text" id="newWelcomeMsg" placeholder="Welcome message" value="Welcome to the meeting!"/>
-    <input type="checkbox" id="newRecord" checked /> Record?
-    <input type="text" id="newVoiceBridge" placeholder="Voice Bridge" value="987654321"/>
-    <button type="submit">Create Meeting</button>
-</form>
-
 <h2>Meetings</h2>
 <table class="meeting-list">
     <thead>
@@ -74,6 +66,7 @@
             <th>Meeting Name</th>
             <th>Meeting ID</th>
             <th>Actions</th>
+            <th>Task</th>
         </tr>
     </thead>
     <tbody id="meetingTableBody">
@@ -83,18 +76,13 @@
 
 <script>
 // Configuration
-const POLL_INTERVAL = 5000;
+const POLL_INTERVAL = 2000;
 
 // Elements
 const botStatusText = document.getElementById('botStatusText');
 const botMeetingInfo = document.getElementById('botMeetingInfo');
 const botMeetingIDEl = document.getElementById('botMeetingID');
 const meetingTableBody = document.getElementById('meetingTableBody');
-const createMeetingForm = document.getElementById('createMeetingForm');
-
-// State
-let botConnected = false;
-let botMeetingID = "";
 
 // Poll the status and meetings periodically
 async function pollData() {
@@ -104,9 +92,9 @@ async function pollData() {
 
 async function fetchBotStatus() {
     try {
-        const res = await fetch('/status');
+        const res = await fetch('/api/v1/status');
         const data = await res.json();
-        botConnected = data.connected;
+        botConnected = data.bots_count > 0;
         botMeetingID = data.meetingID || "";
         updateBotStatusUI();
     } catch (e) {
@@ -127,10 +115,9 @@ function updateBotStatusUI() {
 
 async function fetchMeetings() {
     try {
-        const res = await fetch('/meetings');
+        const res = await fetch('/api/v1/bbb/meetings');
         const data = await res.json();
-        const meetings = data.meetings || {};
-        updateMeetingsUI(meetings);
+        updateMeetingsUI(data);
     } catch (e) {
         console.error("Failed to fetch meetings", e);
     }
@@ -138,8 +125,7 @@ async function fetchMeetings() {
 
 function updateMeetingsUI(meetings) {
     meetingTableBody.innerHTML = '';
-    // meetings is an object keyed by meetingID
-    Object.values(meetings).forEach(meeting => {
+    meetings.forEach(meeting => {
         const tr = document.createElement('tr');
 
         const nameTd = document.createElement('td');
@@ -155,35 +141,31 @@ function updateMeetingsUI(meetings) {
         buttonGroup.classList.add('button-group');
 
         // Bot join/leave button
-        if (botConnected && botMeetingID === meeting.meetingID) {
-            const leaveBotBtn = document.createElement('button');
-            leaveBotBtn.textContent = "Leave Bot";
-            leaveBotBtn.addEventListener('click', () => leaveBot(meeting.meetingID));
-            buttonGroup.appendChild(leaveBotBtn);
+        const joinLeaveBtn = document.createElement('button');
+        if (meeting.participantCount >= meeting.maxUsers) {
+            joinLeaveBtn.textContent = "Max Bots Reached";
+            joinLeaveBtn.classList.add('max-bots-reached');
+            joinLeaveBtn.title = "Max bots reached";
         } else {
-            const joinBotBtn = document.createElement('button');
-            joinBotBtn.textContent = "Join Bot";
-            joinBotBtn.addEventListener('click', () => joinBot(meeting.meetingID));
-            buttonGroup.appendChild(joinBotBtn);
+            joinLeaveBtn.textContent = "Join Bot";
+            joinLeaveBtn.addEventListener('click', () => joinBot(meeting.meetingID));
         }
+        buttonGroup.appendChild(joinLeaveBtn);
 
-        // Join as moderator
-        const joinModBtn = document.createElement('button');
-        joinModBtn.textContent = "Join as Moderator";
-        joinModBtn.addEventListener('click', () => joinUser(meeting.meetingID, true));
-        buttonGroup.appendChild(joinModBtn);
+        // Task switch
+        const taskSelect = document.createElement('select');
+        const transcribeOption = document.createElement('option');
+        transcribeOption.value = "transcribe";
+        transcribeOption.textContent = "Transcribe";
+        taskSelect.appendChild(transcribeOption);
 
-        // Join as attendee
-        const joinAttendeeBtn = document.createElement('button');
-        joinAttendeeBtn.textContent = "Join as Attendee";
-        joinAttendeeBtn.addEventListener('click', () => joinUser(meeting.meetingID, false));
-        buttonGroup.appendChild(joinAttendeeBtn);
+        const translateOption = document.createElement('option');
+        translateOption.value = "translate";
+        translateOption.textContent = "Translate";
+        taskSelect.appendChild(translateOption);
 
-        // End meeting
-        const endMeetingBtn = document.createElement('button');
-        endMeetingBtn.textContent = "End Meeting";
-        endMeetingBtn.addEventListener('click', () => endMeeting(meeting.meetingID));
-        buttonGroup.appendChild(endMeetingBtn);
+        taskSelect.addEventListener('change', (e) => setTask(meeting.meetingID, e.target.value));
+        buttonGroup.appendChild(taskSelect);
 
         actionsTd.appendChild(buttonGroup);
         tr.appendChild(actionsTd);
@@ -195,11 +177,7 @@ function updateMeetingsUI(meetings) {
 // Bot actions
 async function joinBot(meetingID) {
     try {
-        const res = await fetch(`/meeting/${encodeURIComponent(meetingID)}/bot/join`, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({userName: "bot", moderator: true})
-        });
+        const res = await fetch(`/api/v1/bot/join/${meetingID}`, { method: 'POST' });
         const data = await res.json();
         if (data.status === 'success') {
             await fetchBotStatus();
@@ -210,113 +188,17 @@ async function joinBot(meetingID) {
     }
 }
 
-async function leaveBot(meetingID) {
+async function setTask(meetingID, task) {
     try {
-        const res = await fetch(`/meeting/${encodeURIComponent(meetingID)}/bot/leave`, {
-            method: 'POST'
+        await fetch(`/api/v1/bot/set_task/${meetingID}`, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({task: task})
         });
-        const data = await res.json();
-        if (data.status === 'success') {
-            await fetchBotStatus();
-            await fetchMeetings();
-        }
     } catch (e) {
-        console.error("Failed to leave bot", e);
+        console.error("Failed to set task", e);
     }
 }
-
-// Join as user (moderator or attendee)
-async function joinUser(meetingID, isModerator) {
-    const name = prompt("Please enter your name:");
-    if (!name) return;
-
-    try {
-        const res = await fetch(`/meeting/${encodeURIComponent(meetingID)}/join?username=${name}`);
-        const data = await res.json();
-        const url = isModerator ? data.moderator : data.attendee;
-        
-        // We need to set the username parameter to reflect the entered name
-        // The URL looks like ...username=attendee&...
-        // We'll do a quick hacky replace. A more robust approach would parse the URL.
-        let joinURL = new URL(url);
-        
-        // Redirect user to the meeting
-        window.open(joinURL.toString(), '_blank');
-    } catch (e) {
-        console.error("Failed to join as user", e);
-    }
-}
-
-async function endMeeting(meetingID) {
-    if (!confirm("Are you sure you want to end the meeting?")) return;
-
-    try {
-        const res = await fetch(`/meeting/${encodeURIComponent(meetingID)}/end`, {
-            method: 'POST'
-        });
-        const data = await res.json();
-        if (data.status === 'success') {
-            await fetchMeetings();
-        }
-    } catch (e) {
-        console.error("Failed to end meeting", e);
-    }
-  
-}
-
-// Create meeting form submission
-createMeetingForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const meetingName = document.getElementById('newMeetingName').value.trim();
-    const meetingID = document.getElementById('newMeetingID').value.trim();
-    const attendeePW = document.getElementById('newAttendeePW').value.trim();
-    const moderatorPW = document.getElementById('newModeratorPW').value.trim();
-    const welcome = document.getElementById('newWelcomeMsg').value.trim() || "Welcome to the meeting!";
-    const record = document.getElementById('newRecord').checked;
-    const voiceBridge = document.getElementById('newVoiceBridge').value.trim() || "987654321";
-
-    if (!meetingName || !meetingID || !attendeePW || !moderatorPW) {
-        alert("Please fill in all required fields.");
-        return;
-    }
-
-    const body = {
-        name: meetingName,
-        meetingID: meetingID,
-        attendeePW: attendeePW,
-        moderatorPW: moderatorPW,
-        welcome: welcome,
-        allowStartStopRecording: true,
-        autoStartRecording: false,
-        record: record,
-        voiceBridge: parseInt(voiceBridge, 10)
-    };
-
-    try {
-      const res = await fetch('/meeting/', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(body)
-      });
-
-      if (!res.ok) {
-        // If the response isn't ok, read it as text.
-        const errorText = await res.text();
-        throw new Error(`Server returned error: ${errorText}`);
-      }
-
-      // If it's ok, parse it as JSON
-      const data = await res.json();
-      
-      // Clear form
-      createMeetingForm.reset();
-      // Refresh meetings
-      await fetchMeetings();
-    } catch (e) {
-      console.error("Failed to create meeting", e);
-      alert('Failed to create meeting: ' + e.message);
-    }
-});
 
 // Initial load
 pollData();

@@ -3,7 +3,7 @@ module client/test
 go 1.20
 
 require (
-	github.com/bigbluebutton-bot/bigbluebutton-bot v0.1.5
+	github.com/bigbluebutton-bot/bigbluebutton-bot v0.1.6
 	github.com/google/uuid v1.6.0
 	github.com/pion/rtp v1.8.13
 	github.com/pion/webrtc/v3 v3.2.22
@@ -20,6 +20,7 @@ require (
 	github.com/emirpasic/gods v1.12.0 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/gopackage/ddp v0.0.6 // indirect
+	github.com/gorilla/mux v1.8.1
 	github.com/gorilla/websocket v1.5.1 // indirect
 	github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 // indirect
 	github.com/kevinburke/ssh_config v0.0.0-20190725054713-01f96b0aa0cd // indirect
