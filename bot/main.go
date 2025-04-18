@@ -1,7 +1,7 @@
 package main
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -10,403 +10,379 @@ import (
 
 	bbbbot "github.com/bigbluebutton-bot/bigbluebutton-bot"
 	bbbapi "github.com/bigbluebutton-bot/bigbluebutton-bot/api"
-	"github.com/gorilla/mux"
+	"github.com/danielgtaylor/huma/v2"
+	"github.com/danielgtaylor/huma/v2/adapters/humachi"
+	"github.com/danielgtaylor/huma/v2/humacli"
+	"github.com/go-chi/chi/v5"
 )
 
+// -----------------------------------------------------------------------------
+// Globals
+// -----------------------------------------------------------------------------
+
 var (
-	conf *Settings
-	BM   *BotManager
+	conf    *Settings
+	BM      *BotManager
 	bbb_api *bbbapi.ApiRequest
 )
 
-// Define the API handlers
+// -----------------------------------------------------------------------------
+// CLI options
+// -----------------------------------------------------------------------------
+
+type Options struct {
+	Port int `help:"Port to listen on" short:"p" default:"8080"`
+}
+
+// -----------------------------------------------------------------------------
+// Typed I/O structs
+// -----------------------------------------------------------------------------
+
 type statusResponse struct {
-	Bots_count int `json:"bots_count"`
-	Max_bots int `json:"max_bots"`
-}
-func statusHandler(w http.ResponseWriter, r *http.Request) {
-	// Check the status of the bot manager
-	status := statusResponse{
-		Bots_count: len(BM.GetBots()),
-		Max_bots: BM.Max_bots,
-	}
-
-	// Respond with the status
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-
-	// marshall status to JSON
-	responseData, err := json.Marshal(status)
-	if err != nil {
-		http.Error(w, "Failed to marshal status data", http.StatusInternalServerError)
-		return
-	}
-	w.Write(responseData)
+	BotsCount int `json:"bots_count"`
+	MaxBots   int `json:"max_bots"`
 }
 
-func getAllMeetingsHandler(w http.ResponseWriter, r *http.Request) {
-	meetings, err := bbb_api.GetMeetings()
-	if err != nil {
-		http.Error(w, "Failed to fetch meetings", http.StatusInternalServerError)
-		return
-	}
+type StatusOutput struct{ Body statusResponse }
+type MeetingsOutput struct{ Body []bbbapi.Meeting }
+type MeetingOutput struct{ Body bbbapi.Meeting }
+type LanguagesOutput struct{ Body map[string]string }
+type BotsOutput struct{ Body map[string]*Bot }
+type BotOutput struct{ Body *Bot }
 
-	// Respond with the list of meetings
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
+// -----------------------------------------------------------------------------
+// Huma route registration
+// -----------------------------------------------------------------------------
 
-	// retrun meetings as JSON
-	meetings_list := make([]bbbapi.Meeting, len(meetings))
-	count := 0
-	for _, meeting := range meetings {
-		meetings_list[count] = meeting
-		count++
-	}
-	
-	// marshall meetings_list to JSON
-	responseData, err := json.Marshal(meetings_list)
-	if err != nil {
-		http.Error(w, "Failed to marshal meetings data", http.StatusInternalServerError)
-		return
-	}
-	w.Write(responseData)
-}
+func addRoutes(api huma.API) {
+	// -------------------------------------------------------------------------
+	// System
+	// -------------------------------------------------------------------------
+	huma.Register(api, huma.Operation{
+		OperationID: "get-status",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/status",
+		Summary:     "Get server status",
+		Tags:        []string{"System"},
+	}, func(_ context.Context, _ *struct{}) (*StatusOutput, error) {
+		return &StatusOutput{
+			Body: statusResponse{
+				BotsCount: len(BM.GetBots()),
+				MaxBots:   BM.Max_bots,
+			},
+		}, nil
+	})
 
-func getMeetingHandler(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	meetingID := vars["meeting_id"]
+	// -------------------------------------------------------------------------
+	// BBB meetings
+	// -------------------------------------------------------------------------
+	huma.Register(api, huma.Operation{
+		OperationID: "get-meetings",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/bbb/meetings",
+		Summary:     "List all BBB meetings",
+		Tags:        []string{"BBB"},
+	}, func(_ context.Context, _ *struct{}) (*MeetingsOutput, error) {
+		meetings, err := bbb_api.GetMeetings()
+		if err != nil {
+			return nil, huma.NewError(http.StatusInternalServerError, "Failed to fetch meetings")
+		}
+		list := make([]bbbapi.Meeting, 0, len(meetings))
+		for _, m := range meetings {
+			list = append(list, m)
+		}
+		return &MeetingsOutput{Body: list}, nil
+	})
 
-	meetings, err := bbb_api.GetMeetings()
-	if err != nil {
-		http.Error(w, "Failed to fetch meeting", http.StatusInternalServerError)
-		return
-	}
-	meeting, ok := meetings[meetingID]
-	if !ok {
-		http.Error(w, "Meeting not found", http.StatusNotFound)
-		return
-	}
+	huma.Register(api, huma.Operation{
+		OperationID: "get-meeting",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/bbb/meeting/{meeting_id}",
+		Summary:     "Get a single meeting",
+		Tags:        []string{"BBB"},
+	}, func(_ context.Context, input *struct {
+		MeetingID string `path:"meeting_id" doc:"Meeting ID"`
+	}) (*MeetingOutput, error) {
+		meetings, err := bbb_api.GetMeetings()
+		if err != nil {
+			return nil, huma.NewError(http.StatusInternalServerError, "Failed to fetch meeting")
+		}
+		meeting, ok := meetings[input.MeetingID]
+		if !ok {
+			return nil, huma.NewError(http.StatusNotFound, "Meeting not found")
+		}
+		return &MeetingOutput{Body: meeting}, nil
+	})
 
-	// Respond with the meeting data
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
+	huma.Register(api, huma.Operation{
+		OperationID:   "delete-meeting",
+		Method:        http.MethodDelete,
+		Path:          "/api/v1/bbb/meeting/{meeting_id}",
+		Summary:       "End a meeting",
+		Tags:          []string{"BBB"},
+		DefaultStatus: http.StatusNoContent,
+	}, func(_ context.Context, input *struct {
+		MeetingID string `path:"meeting_id" doc:"Meeting ID"`
+	}) (*struct{}, error) {
+		if _, err := bbb_api.EndMeeting(input.MeetingID); err != nil {
+			return nil, huma.NewError(http.StatusInternalServerError, "Failed to end meeting")
+		}
+		return nil, nil
+	})
 
-	// marshall meeting to JSON
-	responseData, err := json.Marshal(meeting)
-	if err != nil {
-		http.Error(w, "Failed to marshal meeting data", http.StatusInternalServerError)
-		return
-	}
-	w.Write(responseData)
-}
+	huma.Register(api, huma.Operation{
+		OperationID: "get-languages",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/bbb/languages",
+		Summary:     "List supported languages",
+		Tags:        []string{"BBB"},
+	}, func(_ context.Context, _ *struct{}) (*LanguagesOutput, error) {
+		codes := bbbbot.AllLanguages()
+		m := make(map[string]string, len(codes))
+		for _, c := range codes {
+			m[string(c)] = bbbbot.LanguageShortToName(c)
+		}
+		return &LanguagesOutput{Body: m}, nil
+	})
 
-func deleteMeetingHandler(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	meetingID := vars["meeting_id"]
+	// -------------------------------------------------------------------------
+	// Bots
+	// -------------------------------------------------------------------------
+	huma.Register(api, huma.Operation{
+		OperationID: "get-bots",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/bots",
+		Summary:     "List all bots",
+		Tags:        []string{"Bots"},
+	}, func(_ context.Context, _ *struct{}) (*BotsOutput, error) {
+		return &BotsOutput{Body: BM.GetBots()}, nil
+	})
 
-	_, err := bbb_api.EndMeeting(meetingID)
-	if err != nil {
-		http.Error(w, "Failed to delete meeting", http.StatusInternalServerError)
-		return
-	}
+	huma.Register(api, huma.Operation{
+		OperationID: "get-bot",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/bot/{bot_id}",
+		Summary:     "Get bot details",
+		Tags:        []string{"Bots"},
+	}, func(_ context.Context, input *struct {
+		BotID string `path:"bot_id" doc:"Bot ID"`
+	}) (*BotOutput, error) {
+		bot, ok := BM.GetBot(input.BotID)
+		if !ok {
+			return nil, huma.NewError(http.StatusNotFound, "Bot not found")
+		}
+		return &BotOutput{Body: bot}, nil
+	})
 
-	w.WriteHeader(http.StatusNoContent)
-}
+	huma.Register(api, huma.Operation{
+		OperationID:   "bot-join",
+		Method:        http.MethodPost,
+		Path:          "/api/v1/bot/join/{meeting_id}",
+		Summary:       "Create a bot and join a meeting",
+		Tags:          []string{"Bots"},
+		DefaultStatus: http.StatusOK,
+	}, func(_ context.Context, input *struct {
+		MeetingID string `path:"meeting_id" doc:"Meeting ID"`
+	}) (*struct{}, error) {
+		if len(BM.GetBots()) >= BM.Max_bots {
+			return nil, huma.NewError(http.StatusTooManyRequests, "Max bots limit reached")
+		}
 
-func getLanguagesHandler(w http.ResponseWriter, r *http.Request) {
-	language_codes := bbbbot.AllLanguages()
-	// Create a map with the language codes and its name
-	language_map := make(map[string]string)
-	for _, code := range language_codes {
-		language_map[string(code)] = bbbbot.LanguageShortToName(code)
-	}
+		if meetings, err := bbb_api.GetMeetings(); err != nil {
+			return nil, huma.NewError(http.StatusInternalServerError, "Failed to fetch meetings")
+		} else if _, ok := meetings[input.MeetingID]; !ok {
+			return nil, huma.NewError(http.StatusNotFound, "Meeting not found")
+		}
 
-	// Respond with the list of languages
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	// marshall language_map to JSON
-	responseData, err := json.Marshal(language_map)
-	if err != nil {
-		http.Error(w, "Failed to marshal languages data", http.StatusInternalServerError)
-		return
-	}
-	w.Write(responseData)
-}
+		if bot, err := BM.AddBot(); err != nil {
+			return nil, huma.NewError(http.StatusInternalServerError, "Failed to create bot")
+		} else if err := bot.Join(input.MeetingID, "Bot"); err != nil {
+			return nil, huma.NewError(http.StatusInternalServerError, "Failed to join meeting")
+		}
+		return nil, nil
+	})
 
-// Define bot-related handlers
-func getAllBotsHandler(w http.ResponseWriter, r *http.Request) {
-	bots := BM.GetBots()
+	huma.Register(api, huma.Operation{
+		OperationID:   "bot-leave",
+		Method:        http.MethodPost,
+		Path:          "/api/v1/bot/{bot_id}/leave",
+		Summary:       "Bot leaves its meeting",
+		Tags:          []string{"Bots"},
+		DefaultStatus: http.StatusOK,
+	}, func(_ context.Context, input *struct {
+		BotID string `path:"bot_id" doc:"Bot ID"`
+	}) (*struct{}, error) {
+		bot, ok := BM.GetBot(input.BotID)
+		if !ok {
+			return nil, huma.NewError(http.StatusNotFound, "Bot not found")
+		}
+		bot.Disconnect()
+		return nil, nil
+	})
 
-	// Respond with all bots information
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	// marshall bots to JSON
-	responseData, err := json.Marshal(bots)
-	if err != nil {
-		http.Error(w, "Failed to marshal bots data", http.StatusInternalServerError)
-		return
-	}
-	w.Write(responseData)
-}
-
-func getBotHandler(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	botID := vars["bot_id"]
-
-	bot, found := BM.GetBot(botID)
-	if !found {
-		http.Error(w, "Bot not found", http.StatusNotFound)
-		return
-	}
-
-	// Respond with bot details
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	// marshall bot to JSON
-	responseData, err := json.Marshal(bot)
-	if err != nil {
-		http.Error(w, "Failed to marshal bot data", http.StatusInternalServerError)
-		return
-	}
-	w.Write(responseData)
-}
-
-func botJoinHandler(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	meetingID := vars["meeting_id"]
-
-	// check if max bots limit is reached
-	if len(BM.GetBots()) >= BM.Max_bots {
-		http.Error(w, "Max bots limit reached", http.StatusTooManyRequests)
-		return
-	}
-
-	// check if meeting exists
-	meetings, err := bbb_api.GetMeetings()
-	if err != nil {
-		http.Error(w, "Failed to fetch meetings", http.StatusInternalServerError)
-		return
-	}
-
-	_, ok := meetings[meetingID]
-	if !ok {
-		http.Error(w, "Meeting not found", http.StatusNotFound)
-		return
-	}
-
-	// Create a new bot
-	bot, err := BM.AddBot()
-	if err != nil {
-		http.Error(w, "Failed to create bot", http.StatusInternalServerError)
-		return
-	}
-
-	// Decode request body to extract meeting ID
-	err = bot.Join(meetingID, "Bot")
-	if err != nil {
-		http.Error(w, "Failed to join meeting", http.StatusInternalServerError)
-		return
-	}
-
-	w.WriteHeader(http.StatusOK)
-}
-
-func botLeaveHandler(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	botID := vars["bot_id"]
-
-	bot, found := BM.GetBot(botID)
-	if !found {
-		http.Error(w, "Bot not found", http.StatusNotFound)
-		return
-	}
-
-	// Leave the meeting
-	bot.Disconnect()
-
-	w.WriteHeader(http.StatusOK)
-}
-
-func botSetTaskHandler(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	botID := vars["bot_id"]
-	task_string := vars["task"]
-
-	bot, found := BM.GetBot(botID)
-	if !found {
-		http.Error(w, "Bot not found", http.StatusNotFound)
-		return
-	}
-
-	// task string to Task type
-	var task Task
-	switch task_string {
+	huma.Register(api, huma.Operation{
+		OperationID:   "bot-set-task",
+		Method:        http.MethodPut,
+		Path:          "/api/v1/bot/{bot_id}/task/{task}",
+		Summary:       "Set bot task (transcribe/translate)",
+		Tags:          []string{"Bots"},
+		DefaultStatus: http.StatusOK,
+	}, func(_ context.Context, input *struct {
+		BotID string `path:"bot_id"  doc:"Bot ID"`
+		Task  string `path:"task"    enum:"transcribe,translate" doc:"Task type"`
+	}) (*struct{}, error) {
+		bot, ok := BM.GetBot(input.BotID)
+		if !ok {
+			return nil, huma.NewError(http.StatusNotFound, "Bot not found")
+		}
+		var task Task
+		switch input.Task {
 		case "transcribe":
 			task = Transcribe
 		case "translate":
 			task = Translate
 		default:
-			http.Error(w, "Invalid task type", http.StatusBadRequest)
-			return
-	}
+			return nil, huma.NewError(http.StatusBadRequest, "Invalid task type")
+		}
+		bot.SetTask(task)
+		return nil, nil
+	})
 
-	bot.SetTask(task)
+	huma.Register(api, huma.Operation{
+		OperationID:   "bot-translate-start",
+		Method:        http.MethodPut,
+		Path:          "/api/v1/bot/{bot_id}/translate/{lang}",
+		Summary:       "Start translation",
+		Tags:          []string{"Bots"},
+		DefaultStatus: http.StatusOK,
+	}, func(_ context.Context, input *struct {
+		BotID string `path:"bot_id" doc:"Bot ID"`
+		Lang  string `path:"lang"  doc:"Language code"`
+	}) (*struct{}, error) {
+		bot, ok := BM.GetBot(input.BotID)
+		if !ok {
+			return nil, huma.NewError(http.StatusNotFound, "Bot not found")
+		}
+		if !isValidLanguage(input.Lang) {
+			return nil, huma.NewError(http.StatusBadRequest, "Invalid language code")
+		}
+		if err := bot.Translate(input.Lang); err != nil {
+			return nil, huma.NewError(http.StatusInternalServerError, "Failed to start translation")
+		}
+		return nil, nil
+	})
 
-	w.WriteHeader(http.StatusOK)
+	huma.Register(api, huma.Operation{
+		OperationID:   "bot-translate-stop",
+		Method:        http.MethodDelete,
+		Path:          "/api/v1/bot/{bot_id}/translate/{lang}",
+		Summary:       "Stop translation",
+		Tags:          []string{"Bots"},
+		DefaultStatus: http.StatusOK,
+	}, func(_ context.Context, input *struct {
+		BotID string `path:"bot_id" doc:"Bot ID"`
+		Lang  string `path:"lang"  doc:"Language code"`
+	}) (*struct{}, error) {
+		bot, ok := BM.GetBot(input.BotID)
+		if !ok {
+			return nil, huma.NewError(http.StatusNotFound, "Bot not found")
+		}
+		if !isValidLanguage(input.Lang) {
+			return nil, huma.NewError(http.StatusBadRequest, "Invalid language code")
+		}
+		if err := bot.StopTranslate(input.Lang); err != nil {
+			return nil, huma.NewError(http.StatusInternalServerError, "Failed to stop translation")
+		}
+		return nil, nil
+	})
 }
 
-func botTranslateHandler(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	botID := vars["bot_id"]
-	lang := vars["lang"]
+// -----------------------------------------------------------------------------
+// Helpers
+// -----------------------------------------------------------------------------
 
-	bot, found := BM.GetBot(botID)
-	if !found {
-		http.Error(w, "Bot not found", http.StatusNotFound)
-		return
-	}
-
-	// check if lang is valid
-	language_codes := bbbbot.AllLanguages()
-	found = false
-	for _, code := range language_codes {
-		if code == bbbbot.Language(lang) {
-			found = true
-			break
+func isValidLanguage(lang string) bool {
+	for _, c := range bbbbot.AllLanguages() {
+		if string(c) == lang {
+			return true
 		}
 	}
-	if !found {
-		http.Error(w, "Invalid language code", http.StatusBadRequest)
-		return
-	}
-
-	// Start translation
-	err := bot.Translate(lang)
-	if err != nil {
-		http.Error(w, "Failed to start translation", http.StatusInternalServerError)
-		return
-	}
-	w.WriteHeader(http.StatusOK)
+	return false
 }
 
-func botStopTranslateHandler(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	botID := vars["bot_id"]
-	lang := vars["lang"]
+func healthCheck(c *Settings) {
+	url := "http://" + c.TranscriptionServer.ExternalHost + ":" +
+		strconv.Itoa(c.TranscriptionServer.HealthCheckPort) + "/health"
 
-	bot, found := BM.GetBot(botID)
-	if !found {
-		http.Error(w, "Bot not found", http.StatusNotFound)
-		return
-	}
-
-	// check if lang is valid
-	language_codes := bbbbot.AllLanguages()
-	found = false
-	for _, code := range language_codes {
-		if code == bbbbot.Language(lang) {
-			found = true
-			break
-		}
-	}
-	if !found {
-		http.Error(w, "Invalid language code", http.StatusBadRequest)
-		return
-	}
-
-	// Stop translation
-	err := bot.StopTranslate(lang)
-	if err != nil {
-		http.Error(w, "Failed to stop translation", http.StatusInternalServerError)
-		return
-	}
-	w.WriteHeader(http.StatusOK)
-}
-
-
-// Initialize the HTTP server and routes
-func main() {
-	var err error
-	conf, err = LoadSettings() // Replace readConfig with LoadSettings
-	if err != nil {
-		panic(err)
-	}
-
-	// Check if all external services are up and running
-	healthCheck(conf)
-
-	bbb_api, err = bbbapi.NewRequest(conf.BBB.API.URL, conf.BBB.API.Secret, conf.BBB.API.SHA)
-	if err != nil {
-		panic(err)
-	}
-
-	// Create the BotManager
-	BM = NewBotManager(
-		conf.Bot.Limit,
-		conf.BBB.Client.URL,
-		conf.BBB.Client.WS,
-		conf.BBB.Pad.URL,
-		conf.BBB.Pad.WS,
-		conf.BBB.API.URL,
-		conf.BBB.API.Secret,
-		conf.BBB.WebRTC.WS,
-		conf.TranscriptionServer.ExternalHost,
-		conf.TranscriptionServer.PortTCP,
-		conf.TranscriptionServer.Secret,
-		conf.TranslationServer.URL,
-		conf.ChangeSet.External,
-		conf.ChangeSet.Port,
-		conf.ChangeSet.Host,
-	)
-
-	// Initialize the router
-	r := mux.NewRouter()
-
-	// API routes
-	r.HandleFunc("/api/v1/status", statusHandler).Methods("GET")
-
-	r.HandleFunc("/api/v1/bbb/meetings", getAllMeetingsHandler).Methods("GET")
-	r.HandleFunc("/api/v1/bbb/meeting/{meeting_id}", getMeetingHandler).Methods("GET")
-	r.HandleFunc("/api/v1/bbb/meeting/{meeting_id}", deleteMeetingHandler).Methods("DELETE")
-	r.HandleFunc("/api/v1/bbb/languages", getLanguagesHandler).Methods("GET")
-
-	r.HandleFunc("/api/v1/bots", getAllBotsHandler).Methods("GET")
-	r.HandleFunc("/api/v1/bot/{bot_id}", getBotHandler).Methods("GET")
-	r.HandleFunc("/api/v1/bot/join/{meeting_id}", botJoinHandler).Methods("POST")
-	r.HandleFunc("/api/v1/bot/{bot_id}/leave", botLeaveHandler).Methods("POST")
-	r.HandleFunc("/api/v1/bot/{bot_id}/task/{task}", botSetTaskHandler).Methods("PUT")
-	r.HandleFunc("/api/v1/bot/{bot_id}/translate/{lang}", botTranslateHandler).Methods("PUT")
-	r.HandleFunc("/api/v1/bot/{bot_id}/translate/{lang}", botStopTranslateHandler).Methods("DELETE")
-
-	// Serve static files in public to /
-	r.PathPrefix("/").Handler(http.StripPrefix("/", http.FileServer(http.Dir("./public"))))
-
-	// Start the server
-	log.Println("Server starting on :8080...")
-	if err := http.ListenAndServe(":8080", r); err != nil {
-		log.Fatal("Server failed:", err)
-	}
-}
-
-func healthCheck(conf *Settings) {
-	// Checks if all external services are up and running
-
-	// Transcription server
-	// Translation server
-	// ChangeSet server
-
-	transcription_srv := conf.TranscriptionServer.ExternalHost
-	transcription_health_port := conf.TranscriptionServer.HealthCheckPort
-
-	// Check if the transcription server is reachable
 	for {
-		if _, err := http.Get("http://" + transcription_srv + ":" + strconv.Itoa(transcription_health_port) + "/health"); err != nil {
-			fmt.Println("Transcription server is down (" + "http://" + transcription_srv + ":" + strconv.Itoa(transcription_health_port) + "/health" + "). Retrying in 5seconds...")
+		if _, err := http.Get(url); err != nil {
+			fmt.Printf("Transcription server is down (%s). Retrying in 5 seconds...\n", url)
 			time.Sleep(5 * time.Second)
 		} else {
 			fmt.Println("Transcription server is up")
 			break
 		}
-		time.Sleep(5 * time.Second)
 	}
+}
+
+// -----------------------------------------------------------------------------
+// main
+// -----------------------------------------------------------------------------
+
+func main() {
+	cli := humacli.New(func(hooks humacli.Hooks, opt *Options) {
+		// ---------------------------------------------------------------------
+		// Initialise settings, external services & state
+		// ---------------------------------------------------------------------
+		var err error
+		conf, err = LoadSettings()
+		if err != nil {
+			panic(err)
+		}
+		healthCheck(conf)
+
+		bbb_api, err = bbbapi.NewRequest(conf.BBB.API.URL, conf.BBB.API.Secret, conf.BBB.API.SHA)
+		if err != nil {
+			panic(err)
+		}
+
+		BM = NewBotManager(
+			conf.Bot.Limit,
+			conf.BBB.Client.URL,
+			conf.BBB.Client.WS,
+			conf.BBB.Pad.URL,
+			conf.BBB.Pad.WS,
+			conf.BBB.API.URL,
+			conf.BBB.API.Secret,
+			conf.BBB.WebRTC.WS,
+			conf.TranscriptionServer.ExternalHost,
+			conf.TranscriptionServer.PortTCP,
+			conf.TranscriptionServer.Secret,
+			conf.TranslationServer.URL,
+			conf.ChangeSet.External,
+			conf.ChangeSet.Port,
+			conf.ChangeSet.Host,
+		)
+
+		// ---------------------------------------------------------------------
+		// Router & API
+		// ---------------------------------------------------------------------
+		router := chi.NewMux()
+		api := humachi.New(router, huma.DefaultConfig("BBB Bot API", "1.0.0"))
+		addRoutes(api)
+
+		// Serve static assets from ./public
+		router.Mount("/", http.StripPrefix("/", http.FileServer(http.Dir("./public"))))
+
+		// ---------------------------------------------------------------------
+		// Start server
+		// ---------------------------------------------------------------------
+		hooks.OnStart(func() {
+			addr := fmt.Sprintf(":%d", opt.Port)
+			log.Printf("Server starting on %s ...", addr)
+			log.Fatal(http.ListenAndServe(addr, router))
+		})
+	})
+
+	cli.Run()
 }
