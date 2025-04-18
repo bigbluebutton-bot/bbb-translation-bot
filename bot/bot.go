@@ -229,12 +229,13 @@ func NewBot(
 	streamclient := NewStreamClient(transcription_host, transcription_port, true, transcription_secret)
 
 	// Create obj
-	return &Bot{
+	return_bot := &Bot{
 		Id:           uuid.New().String(),
 		Status:       Disconnected,
 		Task:         task,
 		client:       client,
 		clients:      make(map[string]*bbbbot.Client),
+		Languages:    make([]string, 0),
 		streamclient: streamclient,
 		audioclient:  client.CreateAudioChannel(),
 		oggFile:      nil,
@@ -256,6 +257,8 @@ func NewBot(
 		UserName:  "",
 		moderator: true,
 	}
+	return_bot.Languages = append(return_bot.Languages, "en")
+	return return_bot
 }
 
 func (b *Bot) Join(
@@ -495,20 +498,6 @@ func (b *Bot) GetAllActiveTranslations() []string {
 	return b.Languages
 }
 
-func removeString(slice []string, strToRemove string) []string {
-	// Create a new slice to store the result
-	var result []string
-
-	// Iterate over the slice and add all elements except the one to be removed
-	for _, str := range slice {
-		if str != strToRemove {
-			result = append(result, str)
-		}
-	}
-
-	return result
-}
-
 func (b *Bot) StopTranslate(
 	targetLang string,
 ) error {
@@ -516,9 +505,18 @@ func (b *Bot) StopTranslate(
 	defer b.clientsMutex.Unlock()
 
 	if client, ok := b.clients[targetLang]; ok {
-		client.Leave()
+		// check if client is connected
+		if client.Status != bbbbot.CONNECTED {
+			client.Leave()
+		}
 		delete(b.clients, targetLang)
-		b.Languages = removeString(b.Languages, targetLang)
+		// remove language from list
+		for i, lang := range b.Languages {
+			if lang == targetLang {
+				b.Languages = append(b.Languages[:i], b.Languages[i+1:]...)
+				break
+			}
+		}
 		return nil
 	}
 	return fmt.Errorf("client not found")
@@ -548,6 +546,11 @@ func (b *Bot) SetTask(task Task) {
 
 		// start all clients
 		for _, lang := range all_languages {
+			// skip en
+			if lang == "en" {
+				continue
+			}
+
 			fmt.Println("Starting translation for language:", lang)
 			err := b.Translate(lang)
 			if err != nil {

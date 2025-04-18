@@ -183,7 +183,14 @@ func addRoutes(api huma.API) {
 		DefaultStatus: http.StatusOK,
 	}, func(_ context.Context, input *struct {
 		MeetingID string `path:"meeting_id" doc:"Meeting ID"`
-	}) (*struct{}, error) {
+	}) (*BotOutput, error) {
+		// check if there is already a bot in this meeting
+		for _, bot := range BM.GetBots() {
+			if bot.MeetingID == input.MeetingID {
+				return nil, huma.NewError(http.StatusConflict, "Bot already in meeting")
+			}
+		}
+
 		if len(BM.GetBots()) >= BM.Max_bots {
 			return nil, huma.NewError(http.StatusTooManyRequests, "Max bots limit reached")
 		}
@@ -194,12 +201,13 @@ func addRoutes(api huma.API) {
 			return nil, huma.NewError(http.StatusNotFound, "Meeting not found")
 		}
 
-		if bot, err := BM.AddBot(); err != nil {
+		bot, err := BM.AddBot()
+		if err != nil {
 			return nil, huma.NewError(http.StatusInternalServerError, "Failed to create bot")
 		} else if err := bot.Join(input.MeetingID, "Bot"); err != nil {
 			return nil, huma.NewError(http.StatusInternalServerError, "Failed to join meeting")
 		}
-		return nil, nil
+		return &BotOutput{Body: bot}, nil
 	})
 
 	huma.Register(api, huma.Operation{
@@ -212,11 +220,12 @@ func addRoutes(api huma.API) {
 	}, func(_ context.Context, input *struct {
 		BotID string `path:"bot_id" doc:"Bot ID"`
 	}) (*struct{}, error) {
-		bot, ok := BM.GetBot(input.BotID)
+		_, ok := BM.GetBot(input.BotID)
 		if !ok {
 			return nil, huma.NewError(http.StatusNotFound, "Bot not found")
 		}
-		bot.Disconnect()
+		BM.RemoveBot(input.BotID)
+
 		return nil, nil
 	})
 
@@ -266,6 +275,20 @@ func addRoutes(api huma.API) {
 		if !isValidLanguage(input.Lang) {
 			return nil, huma.NewError(http.StatusBadRequest, "Invalid language code")
 		}
+
+		//check if the bot is already translating this language
+		all_translations := bot.GetAllActiveTranslations()
+		for _, t := range all_translations {
+			if t == input.Lang {
+				return nil, huma.NewError(http.StatusConflict, "Bot already translating this language")
+			}
+		}
+
+		// check the task
+		if bot.GetTask() != Translate {
+			return nil, huma.NewError(http.StatusBadRequest, "Bot is not in translate mode")
+		}
+
 		if err := bot.Translate(input.Lang); err != nil {
 			return nil, huma.NewError(http.StatusInternalServerError, "Failed to start translation")
 		}
@@ -290,6 +313,19 @@ func addRoutes(api huma.API) {
 		if !isValidLanguage(input.Lang) {
 			return nil, huma.NewError(http.StatusBadRequest, "Invalid language code")
 		}
+		// check if this language is being translated
+		all_languages := bot.GetAllActiveTranslations()
+		found := false
+		for _, t := range all_languages {
+			if t == input.Lang {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil, huma.NewError(http.StatusNotFound, "Language ist not actively being translated")
+		}
+
 		if err := bot.StopTranslate(input.Lang); err != nil {
 			return nil, huma.NewError(http.StatusInternalServerError, "Failed to stop translation")
 		}
