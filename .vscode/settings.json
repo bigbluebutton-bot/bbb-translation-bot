@@ -1,3 +1,3 @@
 {
-    "mypy.dmypyExecutable": "${workspaceFolder}/transcription-service/.venv/bin/dmypy"
+    "makefile.configureOnOpen": false
 }
