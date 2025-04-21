@@ -137,9 +137,19 @@ func addRoutes(api huma.API) {
 		Summary:     "List supported languages",
 		Tags:        []string{"BBB"},
 	}, func(_ context.Context, _ *struct{}) (*LanguagesOutput, error) {
-		codes := bbbbot.AllLanguages()
-		m := make(map[string]string, len(codes))
-		for _, c := range codes {
+		bbbcodes := bbbbot.AllLanguages()
+
+		// remove all codes which arent supported by libre
+		new_codes := make([]bbbbot.Language, 0)
+		for _, c := range bbbcodes {
+			if ConvertBBBToLibretranslate(string(c)) != "" {
+				new_codes = append(new_codes, c)
+			}
+		}
+
+
+		m := make(map[string]string, len(new_codes))
+		for _, c := range new_codes {
 			m[string(c)] = bbbbot.LanguageShortToName(c)
 		}
 		return &LanguagesOutput{Body: m}, nil
