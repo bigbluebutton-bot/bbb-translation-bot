@@ -18,15 +18,15 @@ Before you begin, ensure you have the following:
 
 - **Software:**
   - **Operating System:**
-    - [Ubuntu 22.04](https://releases.ubuntu.com/jammy/)
+    - [Ubuntu 22.04](https://releases.ubuntu.com/jammy/) or
     - Windows: [WSL2](https://docs.microsoft.com/en-us/windows/wsl/install) with Ubuntu 22.04.
   - **Access:** Root access to your machine.
 
-> **Pro Tip:** Consider using [Proxmox](https://www.proxmox.com/) to set up a virtual machine with Ubuntu 22 and enable GPU passthrough.
+> **Tip:** Consider using [Proxmox](https://www.proxmox.com/) to set up a virtual machine with Ubuntu 22 and enable GPU passthrough.
 
 ### 📥 Clone the Repository
 
-DONT clone the project in advance. The script depends on empty sub repositories and will clone them during the setup process. So pls DONT clone this repo in advance and follow the instructions below. 
+**DO NOT** clone sub repositories of the project in advance. The script depends on empty sub repositories and will clone them during the setup process. So pls follow the instructions below. 
 
 ---
 
@@ -34,13 +34,8 @@ DONT clone the project in advance. The script depends on empty sub repositories 
 
 You have two options to set up BBB-Translation-Bot:
 
-1. **Simple Setup**: Quick setup using Docker.
-2. **Developer Setup**: Set up a development environment for contributing or customizing.
-
-Choose the one that fits your needs:
-
-- **For Users**: [Simple Setup](#simple-setup-no-dev)
-- **For Developers**: [Developer Setup](#developer-setup)
+1. **Simple Setup**: Quick setup using Docker. ->[Click](#simple-setup-no-dev)<-
+2. **Developer Setup**: Set up a development environment for contributing or customizing.->[Click](#developer-setup)<-
 
 ---
 
@@ -62,15 +57,9 @@ Follow these steps to get BBB-Translation-Bot up and running quickly using Docke
     make run
     ```
 
-    > **Note:** The system will reboot automatically. After reboot, the script continues running. To check the status after reboot, run:
-
-    ```bash
-    make run
-    ```
-
 3. **Configure the Bot:**
 
-    On the first run, the bot will prompt you to create a `.env` file with your BBB server details:
+    On the first run, the script will ask you some questions to create a `.env` file with your BBB server details:
 
     - **Domain**: Your BBB server's domain.
     - **BBB Secret**: Retrieve it by SSH into your BBB server and running:
@@ -78,14 +67,41 @@ Follow these steps to get BBB-Translation-Bot up and running quickly using Docke
         ```bash
         sudo bbb-conf --secret
         ```
-4. **Logs:**
+4. **Reboot**
+
+    > **Note:** The script will reboot the system automatically. After reboot, the script continues running. To check the status of the script, run:
+
+    ```bash
+    make run
+    ```
+
+5. **Start the Bot:**
+
+    To start the bot, run:
+
+    ```bash
+    make run
+    ```
+
+6. **Open web browser:**
+
+    Open your web browser and navigate to:
+
+    ```plaintext
+    http://<ip>:8080
+    ```
+
+    Replace `<ip>` with your actual domain or IP address.
+
+7. **Logs:**
 
     To view the logs, run:
 
     ```bash
     docker-compose logs -f
     ```
-5. **Stop the Bot:**
+
+8. **Stop the Bot:**
 
     To stop the bot, run:
 
@@ -113,15 +129,9 @@ If you plan to contribute or customize BBB-Translation-Bot, set up a development
     make run-dev
     ```
 
-    > **Note:** The system will reboot automatically. After reboot, the script continues running. To check the status after reboot, run:
-
-    ```bash
-    make run-dev
-    ```
-
 3. **Configure the Bot:**
 
-    On the first run, the bot will prompt you to create a `.env-dev` and `.env-dev-docker` file with your BBB server details:
+    On the first run, the script will ask you some questions to create a `.env-dev` file with your BBB server details:
 
     - **Domain**: Your BBB server's domain.
     - **BBB Secret**: Retrieve it by SSH into your BBB server and running:
@@ -130,7 +140,33 @@ If you plan to contribute or customize BBB-Translation-Bot, set up a development
         sudo bbb-conf --secret
         ```
 
-4. **Logs:**
+4. **Reboot**
+
+    > **Note:** The script will reboot the system automatically. After reboot, the script continues running. To check the status of the script, run:
+
+    ```bash
+    make run-dev
+    ```
+
+5. **Start the Bot:**
+
+    To start the bot, run:
+
+    ```bash
+    make run-dev
+    ```
+
+6. **Open web browser:**
+
+    Open your web browser and navigate to:
+
+    ```plaintext
+    http://<ip>:8080
+    ```
+
+    Replace `<ip>` with your actual domain or IP address.
+
+7. **Logs:**
 
     To view the logs, run:
 
@@ -142,7 +178,7 @@ If you plan to contribute or customize BBB-Translation-Bot, set up a development
     tail -f logs/translation-service.log
     ```
 
-5. **Stop the Bot:**
+8. **Stop the Bot:**
 
     To stop the bot, run:
 
@@ -224,7 +260,7 @@ You can also develop on Windows using WSL2. Follow these steps:
 
 6. **Configure the Bot:**
 
-    On the first run, the bot will prompt you to create a `.env-dev` and `.env-dev-docker` file with your BBB server details:
+    On the first run, the script will ask you some questions to create a `.env-dev` file with your BBB server details:
 
     - **Domain**: Your BBB server's domain.
     - **BBB Secret**: Retrieve it by SSH into your BBB server and running:
@@ -269,7 +305,7 @@ You can also develop on Windows using WSL2. Follow these steps:
 
 ## 🙏 Contributing
 
-We welcome contributions! Whether it's reporting issues, suggesting features, or submitting pull requests, your help is greatly appreciated. 🤝
+I welcome contributions! Whether it's reporting issues, suggesting features, or submitting pull requests, your help is greatly appreciated. 🤝
 
 ---
 
