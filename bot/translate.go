@@ -12,7 +12,6 @@ import (
 
 // Map from BBB to Libretranslate language codes
 var bbbToLibretranslate = map[string]string{
-	"af":    "af",
 	"ar":    "ar",
 	"az":    "az",
 	"bg-BG": "bg",
