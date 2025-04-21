@@ -51,6 +51,8 @@
       const res = await fetch(url, opts);
       if (!res.ok) throw new Error(res.statusText);
       if (res.status === 204) return null;
+      // if body is empty, return null
+      if (res.status === 200 && res.headers.get('Content-Length') === '0') return null;
       return await res.json();
     } catch (err) {
       console.error(url, err);
@@ -237,6 +239,9 @@
         // Join / Leave button
         const tdBtn = document.createElement('td');
         tdBtn.className = 'cell-btn';
+        // if not bot is joined, disable button
+        const currentBot = botsByMeeting[meetingID];
+        tdBtn.disabled = !currentBot;
         const btn = document.createElement('button');
         tdBtn.appendChild(btn);
         tr.appendChild(tdBtn);
@@ -283,9 +288,11 @@
       btn.textContent = bot ? 'Leave' : 'Join';
       btn.disabled    = !bot && currentBots >= maxBots;
 
-      // Sync task toggle & language checkboxes
+      // Disable toggle and language checkboxes if no bot
       toggle.setTask(currentTask);
-      langBox.setLanguages(bot ? bot.languages : [], currentTask === 'transcribe');
+      const toggleCheckbox = toggle.querySelector('input[type=checkbox]');
+      toggleCheckbox.disabled = !bot;
+      langBox.setLanguages(bot ? bot.languages : [], !bot || currentTask === 'transcribe');
     });
 
     // Remove rows for meetings that are no longer running
@@ -308,7 +315,7 @@
   (async () => {
     await fetchLanguages();
     await refresh();
-    setInterval(refresh, 2000);
+    setInterval(refresh, 5000);
   })();
   </script>
 </body>
