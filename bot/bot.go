@@ -467,6 +467,11 @@ func (b *Bot) Translate(
 		return fmt.Errorf("bot is not in translate mode")
 	}
 
+	// check if language is already in use
+	if _, ok := b.clients[targetLang]; ok {
+		return fmt.Errorf("language already in use")
+	}
+
 	// create a new client, join meeting and create capture
 	new_client, err := bbbbot.NewClient(
 		b.bbb_client_url,
@@ -493,6 +498,13 @@ func (b *Bot) Translate(
 	// add new client to the list of clients
 	b.clientsMutex.Lock()
 	b.clients[targetLang] = new_client
+	// if language code in the list, remove it
+	for i, lang := range b.Languages {
+		if lang == targetLang {
+			// remove it from the list
+			b.Languages = append(b.Languages[:i], b.Languages[i+1:]...)
+		}
+	}
 	b.Languages = append(b.Languages, targetLang)
 	b.clientsMutex.Unlock()
 
@@ -506,6 +518,12 @@ func (b *Bot) GetAllActiveTranslations() []string {
 func (b *Bot) StopTranslate(
 	targetLang string,
 ) error {
+	if targetLang == "en" {
+		// switch to transcription mode
+		b.SetTask(Transcribe)
+		return nil
+	}
+
 	b.clientsMutex.Lock()
 	defer b.clientsMutex.Unlock()
 
