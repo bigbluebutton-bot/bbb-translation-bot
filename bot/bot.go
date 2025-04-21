@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -446,6 +447,10 @@ func (b *Bot) Disconnect() {
 	b.clientsMutex.Unlock()
 }
 
+type taskRequest struct {
+	Task string `json:"task"`
+}
+
 func (b *Bot) Translate(
 	targetLang string,
 ) error {
@@ -532,9 +537,35 @@ func (b *Bot) SetTask(task Task) {
 		for _, cl := range b.clients {
 			cl.Leave()
 		}
+
+		// send task to transcription server
+		task_req := taskRequest{
+			Task: "transcribe",
+		}
+		task_req_json, err := json.Marshal(task_req)
+		if err != nil {
+			return
+		}
+		err = b.streamclient.SendTCPMessage(string(task_req_json))
+		if err != nil {
+			return
+		}
 	}
 
 	if b.Task == Transcribe && task == Translate {
+		// send task to transcription server
+		task_req := taskRequest{
+			Task: "translate",
+		}
+		task_req_json, err := json.Marshal(task_req)
+		if err != nil {
+			return
+		}
+		err = b.streamclient.SendTCPMessage(string(task_req_json))
+		if err != nil {
+			return
+		}
+
 		all_languages := b.GetAllActiveTranslations()
 
 		// stop all clients
