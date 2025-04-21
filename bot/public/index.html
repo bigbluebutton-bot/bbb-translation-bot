@@ -1,210 +1,282 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-
-<title>BBB Bot Controller</title>
-
-<style>
-    body {
-        font-family: sans-serif;
-        margin: 20px;
+  <meta charset="utf-8">
+  <title>BBB Bot Control</title>
+  <style>
+    /* Keep language list neat, scrollable, and remember scroll pos */
+    .lang-container {
+      max-height: 150px; /* adjust as needed */
+      overflow-y: auto;
     }
-    h1, h2 {
-        margin-bottom: 10px;
+    .lang-container label {
+      display: block;
+      white-space: nowrap;
     }
-    .meeting-list {
-        margin-top: 20px;
-        border-collapse: collapse;
-        width: 100%;
-    }
-    .meeting-list th, .meeting-list td {
-        border: 1px solid #ccc;
-        padding: 8px;
-        text-align: left;
-    }
-    .meeting-list th {
-        background: #f0f0f0;
-    }
-    .status {
-        margin-bottom: 20px;
-    }
-    .bot-status {
-        display: inline-block;
-        margin-right: 20px;
-        font-weight: bold;
-    }
-    .create-meeting-form {
-        margin-bottom: 20px;
-    }
-    .create-meeting-form input {
-        margin: 5px;
-    }
-    .button-group button {
-        margin-right: 5px;
-    }
-    .max-bots-reached {
-        background-color: gray;
-        cursor: not-allowed;
-    }
-</style>
+  </style>
 </head>
 <body>
+  <h1 id="botCount">Bots: 0 / 0</h1>
 
-<h1>BBB Bot Controller</h1>
-
-<div class="status">
-    <span class="bot-status">Bot Status: <span id="botStatusText">Checking...</span></span>
-    <span id="botMeetingInfo" style="display: none;">Current Meeting: <span id="botMeetingID"></span></span>
-</div>
-
-<h2>Meetings</h2>
-<table class="meeting-list">
+  <table id="meetingsTable" border="1" cellspacing="0" cellpadding="4">
     <thead>
-        <tr>
-            <th>Meeting Name</th>
-            <th>Meeting ID</th>
-            <th>Actions</th>
-            <th>Task</th>
-        </tr>
+      <tr>
+        <th>Meeting</th>
+        <th>Bot</th>
+        <th>Task</th>
+        <th>Languages</th>
+      </tr>
     </thead>
-    <tbody id="meetingTableBody">
-    <!-- Meetings will be dynamically inserted here -->
-    </tbody>
-</table>
+    <tbody></tbody>
+  </table>
 
-<script>
-// Configuration
-const POLL_INTERVAL = 2000;
+  <script>
+  const API_BASE = '/api/v1';
+  let languagesMap = {};      // code -> full name
+  let botsByMeeting = {};     // meeting_id -> bot
+  let maxBots = 0;
+  let currentBots = 0;
 
-// Elements
-const botStatusText = document.getElementById('botStatusText');
-const botMeetingInfo = document.getElementById('botMeetingInfo');
-const botMeetingIDEl = document.getElementById('botMeetingID');
-const meetingTableBody = document.getElementById('meetingTableBody');
+  // Remember scroll positions of each language list keyed by meetingID
+  const langScroll = {};      // meeting_id -> scrollTop
 
-// Poll the status and meetings periodically
-async function pollData() {
-    await fetchBotStatus();
-    await fetchMeetings();
-}
-
-async function fetchBotStatus() {
+  // --------------------------------------------------
+  // Helper wrappers
+  // --------------------------------------------------
+  async function getJSON(url, opts) {
     try {
-        const res = await fetch('/api/v1/status');
-        const data = await res.json();
-        botConnected = data.bots_count > 0;
-        botMeetingID = data.meetingID || "";
-        updateBotStatusUI();
-    } catch (e) {
-        console.error("Failed to fetch bot status", e);
+      const res = await fetch(url, opts);
+      if (!res.ok) throw new Error(res.statusText);
+      if (res.status === 204) return null;
+      return await res.json();
+    } catch (err) {
+      console.error(url, err);
+      return null;
     }
-}
+  }
 
-function updateBotStatusUI() {
-    if (botConnected) {
-        botStatusText.textContent = "Connected";
-        botMeetingInfo.style.display = "inline-block";
-        botMeetingIDEl.textContent = botMeetingID;
-    } else {
-        botStatusText.textContent = "Not Connected";
-        botMeetingInfo.style.display = "none";
+  const put  = (u) => getJSON(u, {method:'PUT' });
+  const post = (u) => getJSON(u, {method:'POST'});
+  const del  = (u) => getJSON(u, {method:'DELETE'});
+
+  // --------------------------------------------------
+  // Initial static data
+  // --------------------------------------------------
+  async function fetchLanguages() {
+    const data = await getJSON(`${API_BASE}/bbb/languages`);
+    if (data) languagesMap = data;
+  }
+
+  // --------------------------------------------------
+  // Status / Bots / Meetings
+  // --------------------------------------------------
+  async function fetchStatus() {
+    const data = await getJSON(`${API_BASE}/status`);
+    if (!data) return;
+    currentBots = data.bots_count;
+    maxBots     = data.max_bots;
+    document.getElementById('botCount').textContent = `Bots: ${currentBots} / ${maxBots}`;
+  }
+
+  async function fetchBots() {
+    const data = await getJSON(`${API_BASE}/bots`);
+    botsByMeeting = {};
+    if (!data) return;
+    Object.values(data).forEach(b => botsByMeeting[b.meeting_id] = b);
+  }
+
+  // --------------------------------------------------
+  // Utility: convert server task value to string name and back
+  // --------------------------------------------------
+  function taskName(bot) {
+    if (!bot) return 'transcribe';
+    if (typeof bot.task === 'string') return bot.task;             // already a name
+    return bot.task === 1 ? 'translate' : 'transcribe';            // numeric convention
+  }
+  function taskValue(name) {
+    if (typeof botsByMeeting.__numericTaskExample === 'string') return name; // string API
+    return name === 'translate' ? 1 : 0;                         // numeric API
+  }
+
+  // --------------------------------------------------
+  // UI helpers
+  // --------------------------------------------------
+  function buildLanguageCheckboxes(meetingID, selectedCodes, disabled, onChange) {
+    const container = document.createElement('div');
+    container.className = 'lang-container';
+    container.dataset.meeting = meetingID;
+
+    // restore scroll position if known
+    if (langScroll[meetingID] !== undefined) {
+      container.scrollTop = langScroll[meetingID];
     }
-}
 
-async function fetchMeetings() {
-    try {
-        const res = await fetch('/api/v1/bbb/meetings');
-        const data = await res.json();
-        updateMeetingsUI(data);
-    } catch (e) {
-        console.error("Failed to fetch meetings", e);
-    }
-}
-
-function updateMeetingsUI(meetings) {
-    meetingTableBody.innerHTML = '';
-    meetings.forEach(meeting => {
-        const tr = document.createElement('tr');
-
-        const nameTd = document.createElement('td');
-        nameTd.textContent = meeting.meetingName;
-        tr.appendChild(nameTd);
-
-        const idTd = document.createElement('td');
-        idTd.textContent = meeting.meetingID;
-        tr.appendChild(idTd);
-
-        const actionsTd = document.createElement('td');
-        const buttonGroup = document.createElement('div');
-        buttonGroup.classList.add('button-group');
-
-        // Bot join/leave button
-        const joinLeaveBtn = document.createElement('button');
-        if (meeting.participantCount >= meeting.maxUsers) {
-            joinLeaveBtn.textContent = "Max Bots Reached";
-            joinLeaveBtn.classList.add('max-bots-reached');
-            joinLeaveBtn.title = "Max bots reached";
-        } else {
-            joinLeaveBtn.textContent = "Join Bot";
-            joinLeaveBtn.addEventListener('click', () => joinBot(meeting.meetingID));
-        }
-        buttonGroup.appendChild(joinLeaveBtn);
-
-        // Task switch
-        const taskSelect = document.createElement('select');
-        const transcribeOption = document.createElement('option');
-        transcribeOption.value = "transcribe";
-        transcribeOption.textContent = "Transcribe";
-        taskSelect.appendChild(transcribeOption);
-
-        const translateOption = document.createElement('option');
-        translateOption.value = "translate";
-        translateOption.textContent = "Translate";
-        taskSelect.appendChild(translateOption);
-
-        taskSelect.addEventListener('change', (e) => setTask(meeting.meetingID, e.target.value));
-        buttonGroup.appendChild(taskSelect);
-
-        actionsTd.appendChild(buttonGroup);
-        tr.appendChild(actionsTd);
-
-        meetingTableBody.appendChild(tr);
+    // persist scroll position when user scrolls
+    container.addEventListener('scroll', () => {
+      langScroll[meetingID] = container.scrollTop;
     });
-}
 
-// Bot actions
-async function joinBot(meetingID) {
-    try {
-        const res = await fetch(`/api/v1/bot/join/${meetingID}`, { method: 'POST' });
-        const data = await res.json();
-        if (data.status === 'success') {
-            await fetchBotStatus();
-            await fetchMeetings();
+    // event handler to compute chosen languages and notify parent
+    const changed = () => {
+      const chosen = Array.from(container.querySelectorAll('input[type=checkbox]'))
+        .filter(cb => cb.checked)
+        .map(cb => cb.value);
+      onChange(chosen);
+    };
+
+    // Build each checkbox
+    for (const [code, name] of Object.entries(languagesMap)) {
+      const label = document.createElement('label');
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.value = code;
+      cb.checked = selectedCodes && selectedCodes.includes(code);
+      cb.disabled = disabled;
+      cb.addEventListener('change', changed);
+
+      label.appendChild(cb);
+      label.appendChild(document.createTextNode(' ' + name));
+      container.appendChild(label);
+    }
+    return container;
+  }
+
+  function createTaskToggle(initialTask, onToggle) {
+    const label = document.createElement('label');
+    const cb    = document.createElement('input');
+    const text  = document.createElement('span');
+    cb.type = 'checkbox';
+    cb.checked = initialTask === 'translate';
+    text.textContent = initialTask.charAt(0).toUpperCase() + initialTask.slice(1);
+
+    cb.addEventListener('change', () => {
+      const newTask = cb.checked ? 'translate' : 'transcribe';
+      text.textContent = newTask.charAt(0).toUpperCase() + newTask.slice(1);
+      onToggle(newTask);
+    });
+
+    label.appendChild(cb);
+    label.appendChild(text);
+    return label;
+  }
+
+  // --------------------------------------------------
+  // Main table renderer
+  // --------------------------------------------------
+  async function drawMeetings() {
+    const meetings = (await getJSON(`${API_BASE}/bbb/meetings`)) || [];
+    const tbody = document.querySelector('#meetingsTable tbody');
+
+    // capture current scroll positions before wiping table
+    tbody.querySelectorAll('.lang-container').forEach(div => {
+      if (div.dataset.meeting)
+        langScroll[div.dataset.meeting] = div.scrollTop;
+    });
+
+    tbody.innerHTML = '';
+
+    meetings.filter(m => m.running).forEach(m => {
+      const tr = document.createElement('tr');
+
+      // Meeting column
+      const tdName = document.createElement('td');
+      tdName.textContent = m.meetingName || m.meetingID;
+      tr.appendChild(tdName);
+
+      // Join / Leave button
+      const tdBtn = document.createElement('td');
+      const bot   = botsByMeeting[m.meetingID];
+      const btn   = document.createElement('button');
+      btn.textContent = bot ? 'Leave' : 'Join';
+      btn.disabled    = !bot && currentBots >= maxBots;
+      tdBtn.appendChild(btn);
+      tr.appendChild(tdBtn);
+
+      // Task toggle & Language selector share state
+      const currentTask = taskName(bot);
+      const tdTask = document.createElement('td');
+      const tdLang = document.createElement('td');
+
+      // Language checkbox list (built first so toggle callback can access)
+      const langBox = buildLanguageCheckboxes(
+        m.meetingID,
+        bot ? bot.languages : [],
+        currentTask === 'transcribe',
+        async (selection) => {
+          const currentBot = botsByMeeting[m.meetingID];
+          if (!currentBot) return;
+
+          // Work with sets for reliable diffing
+          const activeSet = new Set(currentBot.languages || []);
+          const chosenSet = new Set(selection);
+
+          const toAdd    = [...chosenSet].filter(l => !activeSet.has(l));
+          const toRemove = [...activeSet].filter(l => !chosenSet.has(l));
+
+          for (const lang of toAdd) {
+            await put(`${API_BASE}/bot/${encodeURIComponent(currentBot.id)}/translate/${lang}`);
+            activeSet.add(lang); // keep local in sync until refresh
+          }
+          for (const lang of toRemove) {
+            await del(`${API_BASE}/bot/${encodeURIComponent(currentBot.id)}/translate/${lang}`);
+            activeSet.delete(lang);
+          }
+
+          // update cached list immediately so consecutive edits work without waiting for refresh
+          currentBot.languages = [...activeSet];
+
+          await fetchBots();
+          drawMeetings();
         }
-    } catch (e) {
-        console.error("Failed to join bot", e);
-    }
-}
+      );
 
-async function setTask(meetingID, task) {
-    try {
-        await fetch(`/api/v1/bot/set_task/${meetingID}`, {
-            method: 'PUT',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({task: task})
-        });
-    } catch (e) {
-        console.error("Failed to set task", e);
-    }
-}
+      // Task toggle
+      const toggle = createTaskToggle(currentTask, async (newTask) => {
+        const currentBot = botsByMeeting[m.meetingID];
+        if (!currentBot) return;
+        // optimistic UI update
+        currentBot.task = taskValue(newTask);
 
-// Initial load
-pollData();
-// Poll periodically
-setInterval(pollData, POLL_INTERVAL);
-</script>
+        // Enable/disable language checkboxes depending on task
+        Array.from(langBox.querySelectorAll('input[type=checkbox]')).forEach(cb => cb.disabled = newTask === 'transcribe');
 
+        await put(`${API_BASE}/bot/${encodeURIComponent(currentBot.id)}/task/${newTask}`);
+        await fetchBots();
+        drawMeetings();
+      });
+
+      tdTask.appendChild(toggle);
+      tdLang.appendChild(langBox);
+      tr.appendChild(tdTask);
+      tr.appendChild(tdLang);
+
+      // Join/Leave logic handler after building rest of row so we can refresh gracefully
+      btn.addEventListener('click', async () => {
+        if (bot) {
+          await post(`${API_BASE}/bot/${encodeURIComponent(bot.id)}/leave`);
+        } else {
+          await post(`${API_BASE}/bot/join/${encodeURIComponent(m.meetingID)}`);
+        }
+        await refresh();
+      });
+
+      tbody.appendChild(tr);
+    });
+  }
+
+  // --------------------------------------------------
+  // Periodic refresh
+  // --------------------------------------------------
+  async function refresh() {
+    await Promise.all([fetchStatus(), fetchBots()]);
+    drawMeetings();
+  }
+
+  (async () => {
+    await fetchLanguages();
+    await refresh();
+    setInterval(refresh, 2000);
+  })();
+  </script>
 </body>
 </html>
