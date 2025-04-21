@@ -32,13 +32,16 @@
 
   <script>
   const API_BASE = '/api/v1';
-  let languagesMap = {};      // code -> full name
-  let botsByMeeting = {};     // meeting_id -> bot
-  let maxBots = 0;
-  let currentBots = 0;
+  let languagesMap   = {};          // code -> full name
+  let botsByMeeting  = {};          // meeting_id -> bot
+  let maxBots        = 0;
+  let currentBots    = 0;
 
   // Remember scroll positions of each language list keyed by meetingID
-  const langScroll = {};      // meeting_id -> scrollTop
+  const langScroll   = {};          // meeting_id -> scrollTop
+
+  // Cache <tr> nodes so we update in‑place instead of rebuilding everything
+  const rowByMeeting = {};          // meeting_id -> <tr>
 
   // --------------------------------------------------
   // Helper wrappers
@@ -94,14 +97,15 @@
     return bot.task === 1 ? 'translate' : 'transcribe';            // numeric convention
   }
   function taskValue(name) {
-    if (typeof botsByMeeting.__numericTaskExample === 'string') return name; // string API
+    // numeric vs string API detection trick
+    if (typeof botsByMeeting.__numericTaskExample === 'string') return name;
     return name === 'translate' ? 1 : 0;                         // numeric API
   }
 
   // --------------------------------------------------
   // UI helpers
   // --------------------------------------------------
-  function buildLanguageCheckboxes(meetingID, selectedCodes, disabled, onChange) {
+  function buildLanguageCheckboxes(meetingID) {
     const container = document.createElement('div');
     container.className = 'lang-container';
     container.dataset.meeting = meetingID;
@@ -116,44 +120,91 @@
       langScroll[meetingID] = container.scrollTop;
     });
 
-    // event handler to compute chosen languages and notify parent
-    const changed = () => {
-      const chosen = Array.from(container.querySelectorAll('input[type=checkbox]'))
-        .filter(cb => cb.checked)
-        .map(cb => cb.value);
-      onChange(chosen);
-    };
-
-    // Build each checkbox
+    // Build each checkbox only once
     for (const [code, name] of Object.entries(languagesMap)) {
       const label = document.createElement('label');
       const cb = document.createElement('input');
       cb.type = 'checkbox';
       cb.value = code;
-      cb.checked = selectedCodes && selectedCodes.includes(code);
-      cb.disabled = disabled;
-      cb.addEventListener('change', changed);
+
+      // When a language checkbox toggles we diff against the server list
+      cb.addEventListener('change', async () => {
+        const currentBot = botsByMeeting[meetingID];
+        if (!currentBot) return;
+
+        const chosen = Array.from(container.querySelectorAll('input[type=checkbox]'))
+          .filter(cb => cb.checked)
+          .map(cb => cb.value);
+
+        const activeSet = new Set(currentBot.languages || []);
+        const chosenSet = new Set(chosen);
+        const toAdd    = [...chosenSet].filter(l => !activeSet.has(l));
+        const toRemove = [...activeSet].filter(l => !chosenSet.has(l));
+
+        for (const lang of toAdd) {
+          await put(`${API_BASE}/bot/${encodeURIComponent(currentBot.id)}/translate/${lang}`);
+          activeSet.add(lang);
+        }
+        for (const lang of toRemove) {
+          await del(`${API_BASE}/bot/${encodeURIComponent(currentBot.id)}/translate/${lang}`);
+          activeSet.delete(lang);
+        }
+
+        currentBot.languages = [...activeSet]; // optimistic update
+        await fetchBots();
+        drawMeetings();
+      });
 
       label.appendChild(cb);
       label.appendChild(document.createTextNode(' ' + name));
       container.appendChild(label);
     }
+
+    // helper used by drawMeetings() to sync selection/disabled state
+    container.setLanguages = (selectedCodes, disabled) => {
+      const sel = new Set(selectedCodes || []);
+      Array.from(container.querySelectorAll('input[type=checkbox]')).forEach(cb => {
+        cb.checked  = sel.has(cb.value);
+        cb.disabled = disabled;
+      });
+    };
+
     return container;
   }
 
-  function createTaskToggle(initialTask, onToggle) {
+  function createTaskToggle(meetingID, langContainer) {
     const label = document.createElement('label');
     const cb    = document.createElement('input');
     const text  = document.createElement('span');
     cb.type = 'checkbox';
-    cb.checked = initialTask === 'translate';
-    text.textContent = initialTask.charAt(0).toUpperCase() + initialTask.slice(1);
+    cb.className = 'task-toggle';
 
-    cb.addEventListener('change', () => {
+    const setText = (task) => {
+      text.textContent = task.charAt(0).toUpperCase() + task.slice(1);
+    };
+
+    cb.addEventListener('change', async () => {
       const newTask = cb.checked ? 'translate' : 'transcribe';
-      text.textContent = newTask.charAt(0).toUpperCase() + newTask.slice(1);
-      onToggle(newTask);
+      setText(newTask);
+
+      // Enable/disable language checkboxes locally
+      Array.from(langContainer.querySelectorAll('input[type=checkbox]'))
+        .forEach(c => c.disabled = (newTask === 'transcribe'));
+
+      const currentBot = botsByMeeting[meetingID];
+      if (!currentBot) return;
+
+      currentBot.task = taskValue(newTask); // optimistic UI
+      await put(`${API_BASE}/bot/${encodeURIComponent(currentBot.id)}/task/${newTask}`);
+      await fetchBots();
+      drawMeetings();
     });
+
+    // helper used by drawMeetings() to sync state
+    label.setTask = (task) => {
+      cb.checked = (task === 'translate');
+      setText(task);
+    };
 
     label.appendChild(cb);
     label.appendChild(text);
@@ -161,106 +212,88 @@
   }
 
   // --------------------------------------------------
-  // Main table renderer
+  // Main table renderer (updates in‑place)
   // --------------------------------------------------
   async function drawMeetings() {
     const meetings = (await getJSON(`${API_BASE}/bbb/meetings`)) || [];
-    const tbody = document.querySelector('#meetingsTable tbody');
-
-    // capture current scroll positions before wiping table
-    tbody.querySelectorAll('.lang-container').forEach(div => {
-      if (div.dataset.meeting)
-        langScroll[div.dataset.meeting] = div.scrollTop;
-    });
-
-    tbody.innerHTML = '';
+    const tbody    = document.querySelector('#meetingsTable tbody');
+    const seenIDs  = new Set();
 
     meetings.filter(m => m.running).forEach(m => {
-      const tr = document.createElement('tr');
+      const meetingID = m.meetingID;
+      seenIDs.add(meetingID);
 
-      // Meeting column
-      const tdName = document.createElement('td');
-      tdName.textContent = m.meetingName || m.meetingID;
-      tr.appendChild(tdName);
+      let tr = rowByMeeting[meetingID];
+      if (!tr) {
+        // -------------------- New row --------------------
+        tr = document.createElement('tr');
+        tr.dataset.meeting = meetingID;
 
-      // Join / Leave button
-      const tdBtn = document.createElement('td');
-      const bot   = botsByMeeting[m.meetingID];
-      const btn   = document.createElement('button');
+        // Meeting name
+        const tdName = document.createElement('td');
+        tdName.className = 'cell-name';
+        tr.appendChild(tdName);
+
+        // Join / Leave button
+        const tdBtn = document.createElement('td');
+        tdBtn.className = 'cell-btn';
+        const btn = document.createElement('button');
+        tdBtn.appendChild(btn);
+        tr.appendChild(tdBtn);
+
+        // Task toggle & Languages
+        const tdTask = document.createElement('td');
+        tdTask.className = 'cell-task';
+        const tdLang = document.createElement('td');
+        tdLang.className  = 'cell-lang';
+
+        const langBox = buildLanguageCheckboxes(meetingID);
+        const toggle  = createTaskToggle(meetingID, langBox);
+
+        tdTask.appendChild(toggle);
+        tdLang.appendChild(langBox);
+        tr.appendChild(tdTask);
+        tr.appendChild(tdLang);
+
+        // Button behaviour (join/leave)
+        btn.addEventListener('click', async () => {
+          const currentBot = botsByMeeting[meetingID];
+          if (currentBot) {
+            await post(`${API_BASE}/bot/${encodeURIComponent(currentBot.id)}/leave`);
+          } else {
+            await post(`${API_BASE}/bot/join/${encodeURIComponent(meetingID)}`);
+          }
+          await refresh();
+        });
+
+        // Keep refs for quick updates later
+        tr._refs = {tdName, btn, langBox, toggle};
+        rowByMeeting[meetingID] = tr;
+        tbody.appendChild(tr);
+      }
+
+      // -------------------- Update row --------------------
+      const {tdName, btn, langBox, toggle} = tr._refs;
+      tdName.textContent = m.meetingName || meetingID;
+
+      const bot         = botsByMeeting[meetingID];
+      const currentTask = taskName(bot);
+
+      // Join / Leave button state
       btn.textContent = bot ? 'Leave' : 'Join';
       btn.disabled    = !bot && currentBots >= maxBots;
-      tdBtn.appendChild(btn);
-      tr.appendChild(tdBtn);
 
-      // Task toggle & Language selector share state
-      const currentTask = taskName(bot);
-      const tdTask = document.createElement('td');
-      const tdLang = document.createElement('td');
+      // Sync task toggle & language checkboxes
+      toggle.setTask(currentTask);
+      langBox.setLanguages(bot ? bot.languages : [], currentTask === 'transcribe');
+    });
 
-      // Language checkbox list (built first so toggle callback can access)
-      const langBox = buildLanguageCheckboxes(
-        m.meetingID,
-        bot ? bot.languages : [],
-        currentTask === 'transcribe',
-        async (selection) => {
-          const currentBot = botsByMeeting[m.meetingID];
-          if (!currentBot) return;
-
-          // Work with sets for reliable diffing
-          const activeSet = new Set(currentBot.languages || []);
-          const chosenSet = new Set(selection);
-
-          const toAdd    = [...chosenSet].filter(l => !activeSet.has(l));
-          const toRemove = [...activeSet].filter(l => !chosenSet.has(l));
-
-          for (const lang of toAdd) {
-            await put(`${API_BASE}/bot/${encodeURIComponent(currentBot.id)}/translate/${lang}`);
-            activeSet.add(lang); // keep local in sync until refresh
-          }
-          for (const lang of toRemove) {
-            await del(`${API_BASE}/bot/${encodeURIComponent(currentBot.id)}/translate/${lang}`);
-            activeSet.delete(lang);
-          }
-
-          // update cached list immediately so consecutive edits work without waiting for refresh
-          currentBot.languages = [...activeSet];
-
-          await fetchBots();
-          drawMeetings();
-        }
-      );
-
-      // Task toggle
-      const toggle = createTaskToggle(currentTask, async (newTask) => {
-        const currentBot = botsByMeeting[m.meetingID];
-        if (!currentBot) return;
-        // optimistic UI update
-        currentBot.task = taskValue(newTask);
-
-        // Enable/disable language checkboxes depending on task
-        Array.from(langBox.querySelectorAll('input[type=checkbox]')).forEach(cb => cb.disabled = newTask === 'transcribe');
-
-        await put(`${API_BASE}/bot/${encodeURIComponent(currentBot.id)}/task/${newTask}`);
-        await fetchBots();
-        drawMeetings();
-      });
-
-      tdTask.appendChild(toggle);
-      tdLang.appendChild(langBox);
-      tr.appendChild(tdTask);
-      tr.appendChild(tdLang);
-
-      // Join/Leave logic handler after building rest of row so we can refresh gracefully
-      btn.addEventListener('click', async () => {
-        if (bot) {
-          await post(`${API_BASE}/bot/${encodeURIComponent(bot.id)}/leave`);
-        } else {
-          await post(`${API_BASE}/bot/join/${encodeURIComponent(m.meetingID)}`);
-        }
-        await refresh();
-      });
-
-      tbody.appendChild(tr);
+    // Remove rows for meetings that are no longer running
+    Object.keys(rowByMeeting).forEach(id => {
+      if (!seenIDs.has(id)) {
+        rowByMeeting[id].remove();
+        delete rowByMeeting[id];
+      }
     });
   }
 
