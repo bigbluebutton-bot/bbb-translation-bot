@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 	"sync"
 
@@ -76,7 +77,8 @@ func NewBotManager(
 
 func (bm *BotManager) AddBot() (*Bot, error) {
 	if len(bm.bots) >= bm.Max_bots {
-		return nil, fmt.Errorf("max bots reached")
+		log.Printf("[ERROR] Max bots reached: %d", bm.Max_bots)
+		return nil, fmt.Errorf("max bots reached: %d", bm.Max_bots)
 	}
 
 	// transcription_host string,
@@ -101,12 +103,12 @@ func (bm *BotManager) AddBot() (*Bot, error) {
 		bm.changeset_external,
 		bm.changeset_port,
 		bm.changeset_host,
-		Transcribe,
+		TaskTranscribe,
 	)
 	bm.lock.Lock()
 	defer bm.lock.Unlock()
 
-	bm.bots[new_bot.Id] = new_bot
+	bm.bots[new_bot.ID] = new_bot
 
 	return new_bot, nil
 }
@@ -121,7 +123,7 @@ func (bm *BotManager) RemoveBot(botID string) {
 	}
 }
 
-func (bm *BotManager) GetBot(botID string) (*Bot, bool) {
+func (bm *BotManager) Bot(botID string) (*Bot, bool) {
 	bm.lock.Lock()
 	defer bm.lock.Unlock()
 
@@ -131,7 +133,7 @@ func (bm *BotManager) GetBot(botID string) (*Bot, bool) {
 	return nil, false
 }
 
-func (bm *BotManager) GetBots() map[string]*Bot {
+func (bm *BotManager) Bots() map[string]*Bot {
 	bm.lock.Lock()
 	defer bm.lock.Unlock()
 
@@ -152,8 +154,8 @@ func (bm *BotManager) GetBots() map[string]*Bot {
 type Task int
 
 const (
-	Transcribe Task = iota
-	Translate
+	TaskTranscribe Task = iota
+	TaskTranslate
 )
 
 type StatusType int
@@ -165,7 +167,7 @@ const (
 )
 
 type Bot struct {
-	Id           string		`json:"id"`
+	ID           string		`json:"id"`
 	Status       StatusType	`json:"status"`
 	client       *bbbbot.Client
 	clients      map[string]*bbbbot.Client // map of language and client
@@ -231,7 +233,7 @@ func NewBot(
 
 	// Create obj
 	return_bot := &Bot{
-		Id:           uuid.New().String(),
+		ID:           uuid.New().String(),
 		Status:       Disconnected,
 		Task:         task,
 		client:       client,
@@ -293,42 +295,42 @@ func (b *Bot) Join(
 	}
 
 	b.streamclient.OnConnected(func(message string) {
-		fmt.Println("Connected to server.")
+		log.Println("Connected to server.")
 	})
 
 	b.streamclient.OnDisconnected(func(message string) {
-		fmt.Println("Disconnected from server.")
+		log.Println("Disconnected from server.")
 		b.client.Leave()
 	})
 
 	b.streamclient.OnTimeout(func(message string) {
-		fmt.Println("Connection to server timed out.")
+		log.Println("Connection to server timed out.")
 		b.client.Leave()
 	})
 
 	b.streamclient.OnTCPMessage(func(text string) {
-		fmt.Println("TCP message event:", text)
+		log.Println("TCP message event:", text)
 		validtext := strings.ToValidUTF8(text, "")
 
-		if b.Task == Transcribe {
+		if b.Task == TaskTranscribe {
 			// use the english capture
 			captures := b.client.GetCaptures()
 			for _, capture := range captures {
 				if capture.ShortLanguageName == "en" {
 					err := capture.SetText(validtext)
 					if err != nil {
-						fmt.Println("Error in pad write:", err)
+						log.Println("Error in pad write:", err)
 					}
 				}
 			}
-		} else if b.Task == Translate {
+		} else if b.Task == TaskTranslate {
 			// use the english capture to set the text
 			captures := b.client.GetCaptures()
 			for _, capture := range captures {
 				if capture.ShortLanguageName == "en" {
 					err := capture.SetText(validtext)
 					if err != nil {
-						fmt.Println("Error in pad write:", err)
+						log.Println("Error in pad write:", err)
 					}
 				}
 			}
@@ -340,11 +342,11 @@ func (b *Bot) Join(
 					if capture.ShortLanguageName != "en" {
 						translatedText, err := translate(b.translation_server_url, validtext, "en", capture.ShortLanguageName)
 						if err != nil {
-							fmt.Println("Error in translation:", err)
+							log.Println("Error in translation:", err)
 						}
 						err = capture.SetText(translatedText)
 						if err != nil {
-							fmt.Println("Error in pad write:", err)
+							log.Println("Error in pad write:", err)
 						}
 					}
 				}
@@ -375,15 +377,15 @@ func (b *Bot) Join(
 			return
 		}
 
-		fmt.Println("ID: " + track.ID())
-		fmt.Println("Kind: " + track.Kind().String())
-		fmt.Println("StreamID: " + track.StreamID())
-		fmt.Println("SSRC: " + fmt.Sprint(track.SSRC()))
-		fmt.Println("Codec: " + track.Codec().MimeType)
-		fmt.Println("Codec PayloadType: " + fmt.Sprint(track.Codec().PayloadType))
-		fmt.Println("Codec ClockRate: " + fmt.Sprint(track.Codec().ClockRate))
-		fmt.Println("Codec Channels: " + fmt.Sprint(track.Codec().Channels))
-		fmt.Println("Codec SDPFmtpLine: " + track.Codec().SDPFmtpLine)
+		log.Println("ID: " + track.ID())
+		log.Println("Kind: " + track.Kind().String())
+		log.Println("StreamID: " + track.StreamID())
+		log.Println("SSRC: " + fmt.Sprint(track.SSRC()))
+		log.Println("Codec: " + track.Codec().MimeType)
+		log.Println("Codec PayloadType: " + fmt.Sprint(track.Codec().PayloadType))
+		log.Println("Codec ClockRate: " + fmt.Sprint(track.Codec().ClockRate))
+		log.Println("Codec Channels: " + fmt.Sprint(track.Codec().Channels))
+		log.Println("Codec MimeType: " + track.Codec().MimeType)
 
 		go func() {
 			buffer := make([]byte, 1024)
@@ -397,13 +399,13 @@ func (b *Bot) Join(
 				}
 
 				if readErr != nil {
-					fmt.Println("Error during audio track read:", readErr)
+					log.Println("Error during audio track read:", readErr)
 					return
 				}
 
 				rtpPacket := &rtp.Packet{}
 				if err := rtpPacket.Unmarshal(buffer[:n]); err != nil {
-					fmt.Println("Error during RTP packet unmarshal:", err)
+					log.Println("Error during RTP packet unmarshal:", err)
 					return
 				}
 
@@ -412,7 +414,7 @@ func (b *Bot) Join(
 						return
 					}
 
-					fmt.Println("Error during OGG file write:", err)
+					log.Println("Error during OGG file write:", err)
 					return
 				}
 			}
@@ -463,13 +465,14 @@ func (b *Bot) Translate(
 		return fmt.Errorf("bot is disconnected")
 	}
 
-	if b.Task != Translate {
+	if b.Task != TaskTranslate {
 		return fmt.Errorf("bot is not in translate mode")
 	}
 
 	// check if language is already in use
 	if _, ok := b.clients[targetLang]; ok {
-		return fmt.Errorf("language already in use")
+		b.clients[targetLang].Leave()
+		delete(b.clients, targetLang)
 	}
 
 	// create a new client, join meeting and create capture
@@ -499,13 +502,16 @@ func (b *Bot) Translate(
 	b.clientsMutex.Lock()
 	b.clients[targetLang] = new_client
 	// if language code in the list, remove it
-	for i, lang := range b.Languages {
+    skipp := false
+	for _, lang := range b.Languages {
 		if lang == targetLang {
 			// remove it from the list
-			b.Languages = append(b.Languages[:i], b.Languages[i+1:]...)
+			skipp = true
 		}
 	}
-	b.Languages = append(b.Languages, targetLang)
+    if !skipp {
+	    b.Languages = append(b.Languages, targetLang)
+    }
 	b.clientsMutex.Unlock()
 
 	return nil
@@ -520,7 +526,7 @@ func (b *Bot) StopTranslate(
 ) error {
 	if targetLang == "en" {
 		// switch to transcription mode
-		b.SetTask(Transcribe)
+		b.SetTask(TaskTranscribe)
 		return nil
 	}
 
@@ -529,9 +535,7 @@ func (b *Bot) StopTranslate(
 
 	if client, ok := b.clients[targetLang]; ok {
 		// check if client is connected
-		if client.Status != bbbbot.CONNECTED {
-			client.Leave()
-		}
+		client.Leave()
 		delete(b.clients, targetLang)
 		// remove language from list
 		for i, lang := range b.Languages {
@@ -540,6 +544,14 @@ func (b *Bot) StopTranslate(
 				break
 			}
 		}
+		// delete client from clients map
+		for k := range b.clients {
+			if k == targetLang {
+				delete(b.clients, k)
+			}
+		}
+		
+
 		return nil
 	}
 	return fmt.Errorf("client not found")
@@ -550,7 +562,7 @@ func (b *Bot) GetTask() Task {
 }
 
 func (b *Bot) SetTask(task Task) {
-	if b.Task == Translate && task == Transcribe {
+	if b.Task == TaskTranslate && task == TaskTranscribe {
 		// stop all clients
 		for _, cl := range b.clients {
 			cl.Leave()
@@ -570,17 +582,19 @@ func (b *Bot) SetTask(task Task) {
 		}
 	}
 
-	if b.Task == Transcribe && task == Translate {
+	if b.Task == TaskTranscribe && task == TaskTranslate {
 		// send task to transcription server
 		task_req := taskRequest{
 			Task: "translate",
 		}
 		task_req_json, err := json.Marshal(task_req)
 		if err != nil {
+			log.Println("Error in task request json:", err)
 			return
 		}
 		err = b.streamclient.SendTCPMessage(string(task_req_json))
 		if err != nil {
+			log.Println("Error in task request send:", err)
 			return
 		}
 
@@ -600,10 +614,10 @@ func (b *Bot) SetTask(task Task) {
 				continue
 			}
 
-			fmt.Println("Starting translation for language:", lang)
+			log.Println("Starting translation for language:", lang)
 			err := b.Translate(lang)
 			if err != nil {
-				fmt.Println("Error in translate:", err)
+				log.Println("Error in translate:", err)
 			}
 		}
 	}

@@ -67,7 +67,7 @@ func addRoutes(api huma.API) {
 	}, func(_ context.Context, _ *struct{}) (*StatusOutput, error) {
 		return &StatusOutput{
 			Body: statusResponse{
-				BotsCount: len(BM.GetBots()),
+				BotsCount: len(BM.Bots()),
 				MaxBots:   BM.Max_bots,
 			},
 		}, nil
@@ -155,7 +155,7 @@ func addRoutes(api huma.API) {
 		Summary:     "List all bots",
 		Tags:        []string{"Bots"},
 	}, func(_ context.Context, _ *struct{}) (*BotsOutput, error) {
-		return &BotsOutput{Body: BM.GetBots()}, nil
+		return &BotsOutput{Body: BM.Bots()}, nil
 	})
 
 	huma.Register(api, huma.Operation{
@@ -167,7 +167,7 @@ func addRoutes(api huma.API) {
 	}, func(_ context.Context, input *struct {
 		BotID string `path:"bot_id" doc:"Bot ID"`
 	}) (*BotOutput, error) {
-		bot, ok := BM.GetBot(input.BotID)
+		bot, ok := BM.Bot(input.BotID)
 		if !ok {
 			return nil, huma.NewError(http.StatusNotFound, "Bot not found")
 		}
@@ -184,29 +184,46 @@ func addRoutes(api huma.API) {
 	}, func(_ context.Context, input *struct {
 		MeetingID string `path:"meeting_id" doc:"Meeting ID"`
 	}) (*BotOutput, error) {
+		log.Printf("[INFO] bot-join called for meeting_id=%s", input.MeetingID)
 		// check if there is already a bot in this meeting
-		for _, bot := range BM.GetBots() {
+		for _, bot := range BM.Bots() {
+			log.Printf("[DEBUG] Checking bot %s in meeting %s", bot.ID, bot.MeetingID)
 			if bot.MeetingID == input.MeetingID {
+				log.Printf("[WARN] Bot already in meeting %s", input.MeetingID)
 				return nil, huma.NewError(http.StatusConflict, "Bot already in meeting")
 			}
 		}
 
-		if len(BM.GetBots()) >= BM.Max_bots {
+		botsCount := len(BM.Bots())
+		log.Printf("[DEBUG] Current bots count: %d, Max allowed: %d", botsCount, BM.Max_bots)
+		if botsCount >= BM.Max_bots {
+			log.Printf("[ERROR] Max bots limit reached (%d)", BM.Max_bots)
 			return nil, huma.NewError(http.StatusTooManyRequests, "Max bots limit reached")
 		}
 
-		if meetings, err := bbb_api.GetMeetings(); err != nil {
+		log.Printf("[INFO] Fetching meetings from BBB API")
+		meetings, err := bbb_api.GetMeetings()
+		if err != nil {
+			log.Printf("[ERROR] Failed to fetch meetings: %v", err)
 			return nil, huma.NewError(http.StatusInternalServerError, "Failed to fetch meetings")
-		} else if _, ok := meetings[input.MeetingID]; !ok {
+		}
+		if _, ok := meetings[input.MeetingID]; !ok {
+			log.Printf("[WARN] Meeting not found: %s", input.MeetingID)
 			return nil, huma.NewError(http.StatusNotFound, "Meeting not found")
 		}
 
+		log.Printf("[INFO] Adding new bot for meeting %s", input.MeetingID)
 		bot, err := BM.AddBot()
 		if err != nil {
+			log.Printf("[ERROR] Failed to create bot: %v", err)
 			return nil, huma.NewError(http.StatusInternalServerError, "Failed to create bot")
-		} else if err := bot.Join(input.MeetingID, "Bot"); err != nil {
+		}
+		log.Printf("[INFO] Bot %s created, joining meeting %s", bot.ID, input.MeetingID)
+		if err := bot.Join(input.MeetingID, "Bot"); err != nil {
+			log.Printf("[ERROR] Failed to join meeting %s: %v", input.MeetingID, err)
 			return nil, huma.NewError(http.StatusInternalServerError, "Failed to join meeting")
 		}
+		log.Printf("[INFO] Bot %s successfully joined meeting %s", bot.ID, input.MeetingID)
 		return &BotOutput{Body: bot}, nil
 	})
 
@@ -220,12 +237,15 @@ func addRoutes(api huma.API) {
 	}, func(_ context.Context, input *struct {
 		BotID string `path:"bot_id" doc:"Bot ID"`
 	}) (*struct{}, error) {
-		_, ok := BM.GetBot(input.BotID)
+		log.Printf("[INFO] bot-leave called for bot_id=%s", input.BotID)
+		_, ok := BM.Bot(input.BotID)
 		if !ok {
+			log.Printf("[WARN] Bot not found: %s", input.BotID)
 			return nil, huma.NewError(http.StatusNotFound, "Bot not found")
 		}
+		log.Printf("[INFO] Removing bot %s", input.BotID)
 		BM.RemoveBot(input.BotID)
-
+		log.Printf("[INFO] Bot %s removed successfully", input.BotID)
 		return nil, nil
 	})
 
@@ -240,16 +260,16 @@ func addRoutes(api huma.API) {
 		BotID string `path:"bot_id"  doc:"Bot ID"`
 		Task  string `path:"task"    enum:"transcribe,translate" doc:"Task type"`
 	}) (*struct{}, error) {
-		bot, ok := BM.GetBot(input.BotID)
+		bot, ok := BM.Bot(input.BotID)
 		if !ok {
 			return nil, huma.NewError(http.StatusNotFound, "Bot not found")
 		}
 		var task Task
 		switch input.Task {
 		case "transcribe":
-			task = Transcribe
+			task = TaskTranscribe
 		case "translate":
-			task = Translate
+			task = TaskTranslate
 		default:
 			return nil, huma.NewError(http.StatusBadRequest, "Invalid task type")
 		}
@@ -268,7 +288,7 @@ func addRoutes(api huma.API) {
 		BotID string `path:"bot_id" doc:"Bot ID"`
 		Lang  string `path:"lang"  doc:"Language code"`
 	}) (*struct{}, error) {
-		bot, ok := BM.GetBot(input.BotID)
+		bot, ok := BM.Bot(input.BotID)
 		if !ok {
 			return nil, huma.NewError(http.StatusNotFound, "Bot not found")
 		}
@@ -277,7 +297,7 @@ func addRoutes(api huma.API) {
 		}
 
 		//check if the bot is already translating this language
-		all_translations := bot.GetAllActiveTranslations()
+		all_translations := bot.Languages
 		for _, t := range all_translations {
 			if t == input.Lang {
 				return nil, huma.NewError(http.StatusConflict, "Bot already translating this language")
@@ -285,7 +305,7 @@ func addRoutes(api huma.API) {
 		}
 
 		// check the task
-		if bot.GetTask() != Translate {
+		if bot.Task != TaskTranslate {
 			return nil, huma.NewError(http.StatusBadRequest, "Bot is not in translate mode")
 		}
 
@@ -306,7 +326,7 @@ func addRoutes(api huma.API) {
 		BotID string `path:"bot_id" doc:"Bot ID"`
 		Lang  string `path:"lang"  doc:"Language code"`
 	}) (*struct{}, error) {
-		bot, ok := BM.GetBot(input.BotID)
+		bot, ok := BM.Bot(input.BotID)
 		if !ok {
 			return nil, huma.NewError(http.StatusNotFound, "Bot not found")
 		}
@@ -314,7 +334,7 @@ func addRoutes(api huma.API) {
 			return nil, huma.NewError(http.StatusBadRequest, "Invalid language code")
 		}
 		// check if this language is being translated
-		all_languages := bot.GetAllActiveTranslations()
+		all_languages := bot.Languages
 		found := false
 		for _, t := range all_languages {
 			if t == input.Lang {
@@ -327,6 +347,8 @@ func addRoutes(api huma.API) {
 		}
 
 		if err := bot.StopTranslate(input.Lang); err != nil {
+			// log
+			log.Printf("Failed to stop translation: %v", err)
 			return nil, huma.NewError(http.StatusInternalServerError, "Failed to stop translation")
 		}
 		return nil, nil
@@ -338,11 +360,14 @@ func addRoutes(api huma.API) {
 // -----------------------------------------------------------------------------
 
 func isValidLanguage(lang string) bool {
+	log.Printf("[DEBUG] Validating language: %s", lang)
 	for _, c := range bbbbot.AllLanguages() {
 		if string(c) == lang {
+			log.Printf("[DEBUG] Language %s is valid", lang)
 			return true
 		}
 	}
+	log.Printf("[WARN] Language %s is invalid", lang)
 	return false
 }
 
@@ -351,11 +376,12 @@ func healthCheck(c *Settings) {
 		strconv.Itoa(c.TranscriptionServer.HealthCheckPort) + "/health"
 
 	for {
+		log.Printf("[INFO] Performing health check on transcription server: %s", url)
 		if _, err := http.Get(url); err != nil {
-			fmt.Printf("Transcription server is down (%s). Retrying in 5 seconds...\n", url)
+			log.Printf("[ERROR] Transcription server is down (%s): %v. Retrying in 5 seconds...", url, err)
 			time.Sleep(5 * time.Second)
 		} else {
-			fmt.Println("Transcription server is up")
+			log.Printf("[INFO] Transcription server is up")
 			break
 		}
 	}
@@ -371,19 +397,21 @@ func main() {
 		// Initialise settings, external services & state
 		// ---------------------------------------------------------------------
 		var err error
+		log.Printf("[INFO] Loading settings")
 		conf, err = LoadSettings()
 		if err != nil {
-			panic(err)
+			log.Fatalf("[FATAL] Failed to load settings: %v", err)
 		}
 		healthCheck(conf)
 
+		log.Printf("[INFO] Initializing BBB API client")
 		bbb_api, err = bbbapi.NewRequest(conf.BBB.API.URL, conf.BBB.API.Secret, conf.BBB.API.SHA)
 		if err != nil {
-			panic(err)
+			log.Fatalf("[FATAL] Failed to initialize BBB API client: %v", err)
 		}
 
-		BM = NewBotManager(
-			conf.Bot.Limit,
+		log.Printf("[INFO] Creating BotManager")
+		BM = NewBotManager(			conf.Bot.Limit,
 			conf.BBB.Client.URL,
 			conf.BBB.Client.WS,
 			conf.BBB.Pad.URL,
@@ -391,10 +419,13 @@ func main() {
 			conf.BBB.API.URL,
 			conf.BBB.API.Secret,
 			conf.BBB.WebRTC.WS,
+
 			conf.TranscriptionServer.ExternalHost,
 			conf.TranscriptionServer.PortTCP,
 			conf.TranscriptionServer.Secret,
+
 			conf.TranslationServer.URL,
+
 			conf.ChangeSet.External,
 			conf.ChangeSet.Port,
 			conf.ChangeSet.Host,
@@ -403,6 +434,7 @@ func main() {
 		// ---------------------------------------------------------------------
 		// Router & API
 		// ---------------------------------------------------------------------
+		log.Printf("[INFO] Setting up router and API")
 		router := chi.NewMux()
 		api := humachi.New(router, huma.DefaultConfig("BBB Bot API", "1.0.0"))
 		addRoutes(api)
