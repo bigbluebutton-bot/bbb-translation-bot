@@ -299,6 +299,8 @@ You can also develop on Windows using WSL2. Follow these steps:
 - **BigBlueButton:** [Official Website](https://bigbluebutton.org/)
 - **Whisper by OpenAI:** [GitHub Repository](https://github.com/openai/whisper)
 - **faster-whisper:** [GitHub Repository](https://github.com/SYSTRAN/faster-whisper)
+- **whisperX:** [GitHub Repository](https://github.com/m-bain/whisperX)
+- **whisper_streaming:** [GitHub Repository](https://github.com/ufal/whisper_streaming)
 - **bigbluebutton-bot:** [GitHub Repository](https://github.com/bigbluebutton-bot/bigbluebutton-bot)
 - **transcription-service**: [GitHub Repository](https://github.com/bigbluebutton-bot/transcription-service)
 - **stream_pipeline:** [GitHub Repository](https://github.com/bigbluebutton-bot/stream_pipeline)
