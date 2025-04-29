@@ -1,0 +1,29 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Go: Debug Client",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}/bot",
+            "env": {},
+            "args": []
+        },
+        {
+            "name": "Python: Debug Transcription Service",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/transcription-service/main.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/transcription-service",
+            "python": "${workspaceFolder}/transcription-service/.venv/bin/python",
+            "env": {
+                // Add any environment variables needed
+            },
+            "args": [
+                // Add script arguments here if needed
+            ]
+        }
+    ]
+}

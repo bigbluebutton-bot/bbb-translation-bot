@@ -1,134 +1,322 @@
-# BBB-Translation-Bot
+# 🚀 BBB-Translation-Bot
 
-BBB-Translation-Bot is a tool designed to enhance communication in BigBlueButton (BBB) meetings by providing real-time transcription and translation services. Utilizing OpenAI's cutting-edge [Whisper](https://github.com/openai/whisper) technology, the bot joins a BBB meeting's audio channel and transcribes/translates spoken words into text, seamlessly integrating the transcripts into BBB's closed captions feature.
+**BBB-Translation-Bot** helps with communication in [BigBlueButton (BBB)](https://bigbluebutton.org/) meetings by providing **real-time transcription and translation**. The bot listens to the meeting’s audio, turns spoken words into text, and shows translations using a self-hosted version of [Whisper AI](https://github.com/openai/whisper) ([faster-whisper](https://github.com/SYSTRAN/faster-whisper)) and [LibreTranslate](https://libretranslate.com/). It automatically adds the text as closed captions in BBB. 📝🌐
 
-# Getting Started
+> **‼️🚨--> This project only works with BBB 2.x <--🚨‼️**
 
-Follow these simple steps to quickly set up the BBB-Translation-Bot.
+---
 
-## Prerequisites
+## 🛠️ Getting Started
 
-### Hardware
-This setup was testet with a Nvidia RTX 2070 and RTX 3070 GPU. The GPU is used for the transcription and translation of the audio stream.
+### 📋 Prerequisites
 
-### Install Nvidia drivers for Ubuntu:
-Refer to the official [Nvidia documentation](https://docs.nvidia.com/datacenter/tesla/tesla-installation-notes/index.html#ubuntu-lts):
-```bash
-sudo apt update
-sudo apt install linux-headers-$(uname -r)
-distribution=$(. /etc/os-release;echo $ID$VERSION_ID | sed -e 's/\.//g')
-wget https://developer.download.nvidia.com/compute/cuda/repos/$distribution/x86_64/cuda-keyring_1.0-1_all.deb
-sudo dpkg -i cuda-keyring_1.0-1_all.deb
-sudo apt update
-sudo apt -y install cuda-drivers
-sudo reboot now
-```
+Before you begin, ensure you have the following:
 
-### Docker with GPU support
-Ensure Docker with GPU support is installed on your system:
-Refer to the official [Nvidia documentation](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
+- **Hardware:**
+  - **GPU:** NVIDIA GPU. Im using a NVIDIA RTX 4090 ([More Info](https://www.nvidia.com/de-de/geforce/graphics-cards/40-series/rtx-4090/)) for stable transcription speed of ~2.1 seconds with Whisper large. If you are using a less powerful GPU, consider using a smaller model like Whisper base.
+  - **Storage:** Minimum 64GB disk space (more recommended for active development as Docker can consume significant disk space).
 
-```bash
-sudo apt update
+- **Software:**
+  - **Operating System:**
+    - [Ubuntu 22.04](https://releases.ubuntu.com/jammy/) or
+    - Windows: [WSL2](https://docs.microsoft.com/en-us/windows/wsl/install) with Ubuntu 22.04.
+  - **Access:** Root access to your machine.
 
-curl -sSL https://get.docker.com | sh
+> **Tip:** Consider using [Proxmox](https://www.proxmox.com/) to set up a virtual machine with Ubuntu 22 and enable GPU passthrough.
 
-curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg \
-  && curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
-    sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
-    sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list \
-  && \
-    sudo apt-get update
+### 📥 Clone the Repository
 
-sudo apt install nvidia-container-runtime
+**DO NOT** clone sub repositories of the project in advance. The script depends on empty sub repositories and will clone them during the setup process. So pls follow the instructions below. 
 
-which nvidia-container-runtime-hook
+---
 
-sudo systemctl restart docker
+## 🔧 Installation
 
-docker run -it --rm --gpus all ubuntu nvidia-smi # Test GPU support
-```
+You have two options to set up BBB-Translation-Bot:
 
-### Installation
-1. Clone the repository:
+1. **Simple Setup**: Quick setup using Docker. ->[Click](#simple-setup-no-dev)<-
+2. **Developer Setup**: Set up a development environment for contributing or customizing.->[Click](#developer-setup)<-
+
+---
+
+### 🚀 Simple Setup (No Development)
+
+Follow these steps to get BBB-Translation-Bot up and running quickly using Docker:
+
+1. **Clone the Repository:**
+
     ```bash
+    sudo apt update && sudo apt install make -y
     git clone https://github.com/bigbluebutton-bot/bbb-translation-bot
     cd bbb-translation-bot
     ```
 
-2. Configure the bot:
-Copy the example configuration file and modify it according to your preferences:
+2. **Run the Makefile:**
+
     ```bash
-    cp .env_example .env
+    make run
     ```
 
-3. Launch the bot:
-With Docker, you can easily start the bot:
-    ```bash	
-    docker-compose up -d
-    ```
+3. **Configure the Bot:**
 
-# Development Setup
-To set up the environment for development purposes, follow the instructions below.
-## Server Setup
-1. Install Nvidia drivers for Ubuntu:
-Refer to the official [Nvidia documentation](https://docs.nvidia.com/datacenter/tesla/tesla-installation-notes/index.html#ubuntu-lts):
+    On the first run, the script will ask you some questions to create a `.env` file with your BBB server details:
+
+    - **Domain**: Your BBB server's domain.
+    - **BBB Secret**: Retrieve it by SSH into your BBB server and running:
+
+        ```bash
+        sudo bbb-conf --secret
+        ```
+4. **Reboot**
+
+    > **Note:** The script will reboot the system automatically. After reboot, the script continues running. To check the status of the script, run:
+
     ```bash
-    sudo apt install linux-headers-$(uname -r)
-    distribution=$(. /etc/os-release;echo $ID$VERSION_ID | sed -e 's/\.//g')
-    wget https://developer.download.nvidia.com/compute/cuda/repos/$distribution/x86_64/cuda-keyring_1.0-1_all.deb
-    sudo dpkg -i cuda-keyring_1.0-1_all.deb
-    sudo apt update
-    sudo apt -y install cuda-drivers
-    sudo reboot now
+    make run
     ```
 
-2. Install Python dependencies:
+5. **Start the Bot:**
+
+    To start the bot, run:
+
     ```bash
-    cd server
-    sudo apt update
-    sudo apt install python3-pip python3-dev ffmpeg -y
-    python3 -m venv .translation-server
-    source .translation-server/bin/activate
-    pip3 install -r requirements-server.txt --no-cache-dir
+    make run
     ```
 
-3. Run the server:
+6. **Open web browser:**
+
+    Open your web browser and navigate to:
+
+    ```plaintext
+    http://<ip>:8080
+    ```
+
+    Replace `<ip>` with your actual domain or IP address.
+
+7. **Logs:**
+
+    To view the logs, run:
+
     ```bash
-    python3 server.py
+    docker-compose logs -f
     ```
 
-4. Exit the virtual environment:
+8. **Stop the Bot:**
+
+    To stop the bot, run:
+
     ```bash
-    deactivate
+    make stop
     ```
 
-## Client Setup
-1. Install Golang:
-    Follow the official [Golang installation guide](https://go.dev/doc/install):
+---
+
+### 💻 Developer Setup
+
+If you plan to contribute or customize BBB-Translation-Bot, set up a development environment:
+
+1. **Clone the Repository with Submodules:**
+
     ```bash
-    cd client
-    sudo apt update
-    wget https://go.dev/dl/go1.21.3.linux-amd64.tar.gz
-    sudo rm -rf /usr/local/go && sudo tar -C /usr/local -xzf go1.21.3.linux-amd64.tar.gz
-    export PATH=$PATH:/usr/local/go/bin
+    sudo apt update && apt install make git -y
+    git clone https://github.com/bigbluebutton-bot/bbb-translation-bot
+    cd bbb-translation-bot
     ```
 
-2. Install node.js:
-Use [Node Version Manager](https://github.com/nvm-sh/nvm) to install Node.js:
-   ```bash
-   curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.5/install.sh | bash
-   export NVM_DIR="$([ -z "${XDG_CONFIG_HOME-}" ] && printf %s "${HOME}/.nvm" || printf %s "${XDG_CONFIG_HOME}/nvm")"
-   [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh" # This loads nvm
-   nvm install node
-   ```
+2. **Run the Development Makefile:**
 
-3. Install Go dependencies:
     ```bash
-    go get .
+    make run-dev
     ```
 
-4. Run the client:
+3. **Configure the Bot:**
+
+    On the first run, the script will ask you some questions to create a `.env-dev` file with your BBB server details:
+
+    - **Domain**: Your BBB server's domain.
+    - **BBB Secret**: Retrieve it by SSH into your BBB server and running:
+
+        ```bash
+        sudo bbb-conf --secret
+        ```
+
+4. **Reboot**
+
+    > **Note:** The script will reboot the system automatically. After reboot, the script continues running. To check the status of the script, run:
+
     ```bash
-    go run .
+    make run-dev
     ```
+
+5. **Start the Bot:**
+
+    To start the bot, run:
+
+    ```bash
+    make run-dev
+    ```
+
+6. **Open web browser:**
+
+    Open your web browser and navigate to:
+
+    ```plaintext
+    http://<ip>:8080
+    ```
+
+    Replace `<ip>` with your actual domain or IP address.
+
+7. **Logs:**
+
+    To view the logs, run:
+
+    ```bash
+    tail -f logs/bot.log
+    tail -f logs/changeset-grpc.log
+    tail -f logs/prometheus.log
+    tail -f logs/transcription-service.log
+    tail -f logs/translation-service.log
+    ```
+
+8. **Stop the Bot:**
+
+    To stop the bot, run:
+
+    ```bash
+    make stop
+    ```
+
+---
+
+## 🪟 Windows WSL Setup
+
+You can also develop on Windows using WSL2. Follow these steps:
+
+1. **Install NVIDIA Drivers on Windows:**
+
+    Download and install from [NVIDIA Drivers](https://www.nvidia.com/en-us/drivers/). According to the [WSL CUDA Guide](https://docs.nvidia.com/cuda/wsl-user-guide/index.html#getting-started-with-cuda-on-wsl), WSL2 will access these drivers.
+
+2. **Install WSL2:**
+
+    Open PowerShell as an administrator and run:
+
+    ```bash
+    wsl --install
+    ```
+
+3. **Install Ubuntu 22.04:**
+
+    - Open the [Microsoft Store](https://apps.microsoft.com/detail/9pn20msr04dw).
+    - Search for **Ubuntu 22.04**.
+    - Click **Install** and wait for the installation to complete.
+
+4. **Install Docker Desktop:**
+
+    - Download from [Docker Desktop](https://www.docker.com/products/docker-desktop).
+    - Install and enable WSL2 integration.
+    - Open the Ubuntu 22.04 terminal and verify Docker by running:
+
+    ```bash
+    docker
+    ```
+
+    **🔧 Fix Docker Command Not Found Error:**
+
+    <details>
+      <summary>Solution: --> Click to expand <--</summary>
+
+      If you encounter:
+
+      ```bash
+      $ docker
+      The command 'docker' could not be found in this WSL 2 distro.
+      We recommend activating WSL integration in Docker Desktop settings.
+
+      For details, visit:
+      https://docs.docker.com/go/wsl2/
+      ```
+
+      **Solution:**
+
+      - Open Docker Desktop.
+      - Go to **Settings** > **Resources** > **WSL Integration**.
+      - Enable integration for **Ubuntu22**.
+
+      ![Enable Docker in WSL](docs/imgs/enable-docker-in-wsl.png)
+
+      *Thanks to [this post](https://stackoverflow.com/questions/63497928/ubuntu-wsl-with-docker-could-not-be-found) for the solution.*
+    </details>
+
+5. **Clone and Run the Bot:**
+
+    In the Ubuntu 22.04 terminal, execute:
+
+    ```bash
+    sudo apt update && apt install make git -y
+    git clone https://github.com/bigbluebutton-bot/bbb-translation-bot
+    cd bbb-translation-bot
+    make run-dev
+    ```
+
+6. **Configure the Bot:**
+
+    On the first run, the script will ask you some questions to create a `.env-dev` file with your BBB server details:
+
+    - **Domain**: Your BBB server's domain.
+    - **BBB Secret**: Retrieve it by SSH into your BBB server and running:
+
+        ```bash
+        sudo bbb-conf --secret
+        ```
+
+7. **Logs:**
+
+    To view the logs, run:
+
+    ```bash
+    tail -f logs/bot.log
+    tail -f logs/changeset-grpc.log
+    tail -f logs/prometheus.log
+    tail -f logs/transcription-service.log
+    tail -f logs/translation-service.log
+    ```
+8. **Stop the Bot:**
+
+    To stop the bot, run:
+
+    ```bash
+    make stop
+    ```
+
+---
+
+## 📚 Additional Resources
+
+- **BigBlueButton:** [Official Website](https://bigbluebutton.org/)
+- **Whisper by OpenAI:** [GitHub Repository](https://github.com/openai/whisper)
+- **faster-whisper:** [GitHub Repository](https://github.com/SYSTRAN/faster-whisper)
+- **bigbluebutton-bot:** [GitHub Repository](https://github.com/bigbluebutton-bot/bigbluebutton-bot)
+- **transcription-service**: [GitHub Repository](https://github.com/bigbluebutton-bot/transcription-service)
+- **stream_pipeline:** [GitHub Repository](https://github.com/bigbluebutton-bot/stream_pipeline)
+- **changeset-grpc:** [GitHub Repository](https://github.com/bigbluebutton-bot/changeset-grpc)
+- **LibreTranslate:** [GitHub Repository](https://github.com/LibreTranslate/LibreTranslate)
+
+---
+
+## 🙏 Contributing
+
+I welcome contributions! Whether it's reporting issues, suggesting features, or submitting pull requests, your help is greatly appreciated. 🤝
+
+---
+
+## 📝 License
+
+This project is licensed under the [MIT License](LICENSE).
+
+---
+
+## 📫 Contact
+
+For any questions or support, feel free to [open an issue](https://github.com/bigbluebutton-bot/bbb-translation-bot/issues) on GitHub.
+
+---

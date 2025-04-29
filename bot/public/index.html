@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>BBB Bot Control</title>
+  <style>
+    /* Keep language list neat, scrollable, and remember scroll pos */
+    .lang-container {
+      max-height: 150px; /* adjust as needed */
+      overflow-y: auto;
+    }
+    .lang-container label {
+      display: block;
+      white-space: nowrap;
+    }
+  </style>
+</head>
+<body>
+  <h1 id="botCount">Bots: 0 / 0</h1>
+
+  <table id="meetingsTable" border="1" cellspacing="0" cellpadding="4">
+    <thead>
+      <tr>
+        <th>Meeting</th>
+        <th>Bot</th>
+        <th>Task</th>
+        <th>Languages</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <script>
+  const API_BASE = '/api/v1';
+  let languagesMap   = {};          // code -> full name
+  let botsByMeeting  = {};          // meeting_id -> bot
+  let maxBots        = 0;
+  let currentBots    = 0;
+
+  // Remember scroll positions of each language list keyed by meetingID
+  const langScroll   = {};          // meeting_id -> scrollTop
+
+  // Cache <tr> nodes so we update in‑place instead of rebuilding everything
+  const rowByMeeting = {};          // meeting_id -> <tr>
+
+  // --------------------------------------------------
+  // Helper wrappers
+  // --------------------------------------------------
+  async function getJSON(url, opts) {
+    try {
+      const res = await fetch(url, opts);
+      if (!res.ok) throw new Error(res.statusText);
+      if (res.status === 204) return null;
+      // if body is empty, return null
+      if (res.status === 200 && res.headers.get('Content-Length') === '0') return null;
+      return await res.json();
+    } catch (err) {
+      console.error(url, err);
+      return null;
+    }
+  }
+
+  const put  = (u) => getJSON(u, {method:'PUT' });
+  const post = (u) => getJSON(u, {method:'POST'});
+  const del  = (u) => getJSON(u, {method:'DELETE'});
+
+  // --------------------------------------------------
+  // Initial static data
+  // --------------------------------------------------
+  async function fetchLanguages() {
+    const data = await getJSON(`${API_BASE}/bbb/languages`);
+    if (data) languagesMap = data;
+  }
+
+  // --------------------------------------------------
+  // Status / Bots / Meetings
+  // --------------------------------------------------
+  async function fetchStatus() {
+    const data = await getJSON(`${API_BASE}/status`);
+    if (!data) return;
+    currentBots = data.bots_count;
+    maxBots     = data.max_bots;
+    document.getElementById('botCount').textContent = `Bots: ${currentBots} / ${maxBots}`;
+  }
+
+  async function fetchBots() {
+    const data = await getJSON(`${API_BASE}/bots`);
+    botsByMeeting = {};
+    if (!data) return;
+    Object.values(data).forEach(b => botsByMeeting[b.meeting_id] = b);
+  }
+
+  // --------------------------------------------------
+  // Utility: convert server task value to string name and back
+  // --------------------------------------------------
+  function taskName(bot) {
+    if (!bot) return 'transcribe';
+    if (typeof bot.task === 'string') return bot.task;             // already a name
+    return bot.task === 1 ? 'translate' : 'transcribe';            // numeric convention
+  }
+  function taskValue(name) {
+    // numeric vs string API detection trick
+    if (typeof botsByMeeting.__numericTaskExample === 'string') return name;
+    return name === 'translate' ? 1 : 0;                         // numeric API
+  }
+
+  // --------------------------------------------------
+  // UI helpers
+  // --------------------------------------------------
+  function buildLanguageCheckboxes(meetingID) {
+    const container = document.createElement('div');
+    container.className = 'lang-container';
+    container.dataset.meeting = meetingID;
+
+    // restore scroll position if known
+    if (langScroll[meetingID] !== undefined) {
+      container.scrollTop = langScroll[meetingID];
+    }
+
+    // persist scroll position when user scrolls
+    container.addEventListener('scroll', () => {
+      langScroll[meetingID] = container.scrollTop;
+    });
+
+    // Build each checkbox only once
+    for (const [code, name] of Object.entries(languagesMap)) {
+      const label = document.createElement('label');
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.value = code;
+
+      // When a language checkbox toggles we diff against the server list
+      cb.addEventListener('change', async () => {
+        const currentBot = botsByMeeting[meetingID];
+        if (!currentBot) return;
+
+        const chosen = Array.from(container.querySelectorAll('input[type=checkbox]'))
+          .filter(cb => cb.checked)
+          .map(cb => cb.value);
+
+        const activeSet = new Set(currentBot.languages || []);
+        const chosenSet = new Set(chosen);
+        const toAdd    = [...chosenSet].filter(l => !activeSet.has(l));
+        const toRemove = [...activeSet].filter(l => !chosenSet.has(l));
+
+        for (const lang of toAdd) {
+          await put(`${API_BASE}/bot/${encodeURIComponent(currentBot.id)}/translate/${lang}`);
+          activeSet.add(lang);
+        }
+        for (const lang of toRemove) {
+          await del(`${API_BASE}/bot/${encodeURIComponent(currentBot.id)}/translate/${lang}`);
+          activeSet.delete(lang);
+        }
+
+        currentBot.languages = [...activeSet]; // optimistic update
+        await fetchBots();
+        drawMeetings();
+      });
+
+      label.appendChild(cb);
+      label.appendChild(document.createTextNode(' ' + name));
+      container.appendChild(label);
+    }
+
+    // helper used by drawMeetings() to sync selection/disabled state
+    container.setLanguages = (selectedCodes, disabled) => {
+      const sel = new Set(selectedCodes || []);
+      Array.from(container.querySelectorAll('input[type=checkbox]')).forEach(cb => {
+        cb.checked  = sel.has(cb.value);
+        cb.disabled = disabled;
+      });
+    };
+
+    return container;
+  }
+
+  function createTaskToggle(meetingID, langContainer) {
+    const label = document.createElement('label');
+    const cb    = document.createElement('input');
+    const text  = document.createElement('span');
+    cb.type = 'checkbox';
+    cb.className = 'task-toggle';
+
+    const setText = (task) => {
+      text.textContent = task.charAt(0).toUpperCase() + task.slice(1);
+    };
+
+    cb.addEventListener('change', async () => {
+      const newTask = cb.checked ? 'translate' : 'transcribe';
+      setText(newTask);
+
+      // Enable/disable language checkboxes locally
+      Array.from(langContainer.querySelectorAll('input[type=checkbox]'))
+        .forEach(c => c.disabled = (newTask === 'transcribe'));
+
+      const currentBot = botsByMeeting[meetingID];
+      if (!currentBot) return;
+
+      currentBot.task = taskValue(newTask); // optimistic UI
+      await put(`${API_BASE}/bot/${encodeURIComponent(currentBot.id)}/task/${newTask}`);
+      await fetchBots();
+      drawMeetings();
+    });
+
+    // helper used by drawMeetings() to sync state
+    label.setTask = (task) => {
+      cb.checked = (task === 'translate');
+      setText(task);
+    };
+
+    label.appendChild(cb);
+    label.appendChild(text);
+    return label;
+  }
+
+  // --------------------------------------------------
+  // Main table renderer (updates in‑place)
+  // --------------------------------------------------
+  async function drawMeetings() {
+    const meetings = (await getJSON(`${API_BASE}/bbb/meetings`)) || [];
+    const tbody    = document.querySelector('#meetingsTable tbody');
+    const seenIDs  = new Set();
+
+    meetings.filter(m => m.running).forEach(m => {
+      const meetingID = m.meetingID;
+      seenIDs.add(meetingID);
+
+      let tr = rowByMeeting[meetingID];
+      if (!tr) {
+        // -------------------- New row --------------------
+        tr = document.createElement('tr');
+        tr.dataset.meeting = meetingID;
+
+        // Meeting name
+        const tdName = document.createElement('td');
+        tdName.className = 'cell-name';
+        tr.appendChild(tdName);
+
+        // Join / Leave button
+        const tdBtn = document.createElement('td');
+        tdBtn.className = 'cell-btn';
+        // if not bot is joined, disable button
+        const currentBot = botsByMeeting[meetingID];
+        tdBtn.disabled = !currentBot;
+        const btn = document.createElement('button');
+        tdBtn.appendChild(btn);
+        tr.appendChild(tdBtn);
+
+        // Task toggle & Languages
+        const tdTask = document.createElement('td');
+        tdTask.className = 'cell-task';
+        const tdLang = document.createElement('td');
+        tdLang.className  = 'cell-lang';
+
+        const langBox = buildLanguageCheckboxes(meetingID);
+        const toggle  = createTaskToggle(meetingID, langBox);
+
+        tdTask.appendChild(toggle);
+        tdLang.appendChild(langBox);
+        tr.appendChild(tdTask);
+        tr.appendChild(tdLang);
+
+        // Button behaviour (join/leave)
+        btn.addEventListener('click', async () => {
+          const currentBot = botsByMeeting[meetingID];
+          if (currentBot) {
+            await post(`${API_BASE}/bot/${encodeURIComponent(currentBot.id)}/leave`);
+          } else {
+            await post(`${API_BASE}/bot/join/${encodeURIComponent(meetingID)}`);
+          }
+          await refresh();
+        });
+
+        // Keep refs for quick updates later
+        tr._refs = {tdName, btn, langBox, toggle};
+        rowByMeeting[meetingID] = tr;
+        tbody.appendChild(tr);
+      }
+
+      // -------------------- Update row --------------------
+      const {tdName, btn, langBox, toggle} = tr._refs;
+      tdName.textContent = m.meetingName || meetingID;
+
+      const bot         = botsByMeeting[meetingID];
+      const currentTask = taskName(bot);
+
+      // Join / Leave button state
+      btn.textContent = bot ? 'Leave' : 'Join';
+      btn.disabled    = !bot && currentBots >= maxBots;
+
+      // Disable toggle and language checkboxes if no bot
+      toggle.setTask(currentTask);
+      const toggleCheckbox = toggle.querySelector('input[type=checkbox]');
+      toggleCheckbox.disabled = !bot;
+      langBox.setLanguages(bot ? bot.languages : [], !bot || currentTask === 'transcribe');
+    });
+
+    // Remove rows for meetings that are no longer running
+    Object.keys(rowByMeeting).forEach(id => {
+      if (!seenIDs.has(id)) {
+        rowByMeeting[id].remove();
+        delete rowByMeeting[id];
+      }
+    });
+  }
+
+  // --------------------------------------------------
+  // Periodic refresh
+  // --------------------------------------------------
+  async function refresh() {
+    await Promise.all([fetchStatus(), fetchBots()]);
+    drawMeetings();
+  }
+
+  (async () => {
+    await fetchLanguages();
+    await refresh();
+    setInterval(refresh, 5000);
+  })();
+  </script>
+</body>
+</html>

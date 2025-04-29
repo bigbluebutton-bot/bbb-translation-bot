@@ -1,0 +1,91 @@
+services:
+  bot:
+    container_name: bot
+    hostname: bot
+    restart: always
+    build:
+      context: .
+      dockerfile: Dockerfile-bot
+    env_file:
+      - .env-dev-docker
+    networks:
+      - bbb-translation-bot
+    depends_on:
+      - changeset-service
+      - transcription-service
+    ports:
+      - "8080:8080"
+
+  changeset-service:
+    container_name: changeset-service
+    hostname: changeset-service
+    restart: always
+    build:
+      context: ./changeset-grpc
+      dockerfile: Dockerfile
+    networks:
+      - bbb-translation-bot
+    # ports:
+    #   - "50051:50051"
+
+  transcription-service:
+    container_name: transcription-service
+    hostname: transcription-service
+    build:
+      context: ./transcription-service
+      dockerfile: Dockerfile
+    networks:
+      - bbb-translation-bot
+    # ports:
+    #   - 8042:8042
+    env_file:
+      - .env-dev-docker
+    volumes:
+      - ./.models:/app/.models
+      - ./transcription-service/logs:/app/logs
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: -1
+              capabilities: ["gpu"]
+
+  translation-service:
+    container_name: translation-service
+    hostname: translation-service
+    image: libretranslate/libretranslate:latest-cuda
+    restart: unless-stopped
+    ports:
+      - "8000:5000"
+    tty: true
+    healthcheck:
+      test: ['CMD-SHELL', './venv/bin/python scripts/healthcheck.py']     
+    command: --ssl --ga-id MY-GA-ID
+    volumes:
+      - ./.models/libretranslate:/root/.local:rw
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: -1
+              capabilities: ["gpu"]
+    networks:
+      - bbb-translation-bot
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    hostname: prometheus
+    restart: always
+    ports:
+      - 1000:9090
+    volumes:
+      - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    networks:
+      - bbb-translation-bot
+
+networks:
+  bbb-translation-bot:
+    driver: bridge

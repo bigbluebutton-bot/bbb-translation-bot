@@ -1,55 +1,85 @@
-version: '3.9'
-
 services:
   bot:
     container_name: bot
+    hostname: bot
+    restart: always
     build:
-      context: ./client
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: Dockerfile-bot
     env_file:
       - .env
     networks:
-      - bbb-bot
+      - bbb-translation-bot
+    ports:
+      - 8080:8080
     depends_on:
-      - changeset-server
-      - transcription-server
+      - changeset-service
+      - transcription-service
 
-  changeset-server:
-    container_name: changeset-server
+  changeset-service:
+    container_name: changeset-service
+    hostname: changeset-service
+    restart: always
     build:
       context: https://github.com/bigbluebutton-bot/changeset-grpc.git
       dockerfile: Dockerfile
     networks:
-      - bbb-bot
-    # ports:
-    #   - "5051:5051"
+      - bbb-translation-bot
 
-  transcription-server:
-    container_name: transcription-server
+  transcription-service:
+    container_name: transcription-service
+    hostname: transcription-service
     build:
-      context: ./server
+      context: https://github.com/bigbluebutton-bot/transcription-service.git
       dockerfile: Dockerfile
-    volumes:
-      - ./.models:/app/models
+    networks:
+      - bbb-translation-bot
     env_file:
       - .env
-    networks:
-      - bbb-bot
-    # ports:
-    #   - "8001:8001"
-    #   - "5000:5000"
-    #   - "5001:5001"
-    ipc: host
-    tty: true
-    stdin_open: true
+    volumes:
+      - ./.models:/app/.models
+      # - ./logs:/app/logs
     deploy:
       resources:
         reservations:
           devices:
-          - driver: nvidia
-            capabilities: [gpu]
+            - driver: nvidia
+              count: -1
+              capabilities: ["gpu"]
 
+  translation-service:
+    container_name: translation-service
+    hostname: translation-service
+    image: libretranslate/libretranslate:latest-cuda
+    restart: unless-stopped
+    tty: true
+    healthcheck:
+      test: ['CMD-SHELL', './venv/bin/python scripts/healthcheck.py']     
+    command: --ssl --ga-id MY-GA-ID
+    volumes:
+      - ./.models/libretranslate:/root/.local:rw
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: -1
+              capabilities: ["gpu"]
+    networks:
+      - bbb-translation-bot
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    hostname: prometheus
+    restart: always
+    ports:
+      - 1000:9090
+    volumes:
+      - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    networks:
+      - bbb-translation-bot
 
 networks:
-  bbb-bot:
+  bbb-translation-bot:
     driver: bridge
