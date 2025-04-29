@@ -19,7 +19,7 @@ import (
 type BotManager struct {
 	Max_bots int
 
-	lock    sync.Mutex
+	lock sync.Mutex
 	bots map[string]*Bot
 
 	bbb_client_url         string
@@ -56,7 +56,7 @@ func NewBotManager(
 	changeset_host string,
 ) *BotManager {
 	return &BotManager{
-		Max_bots:              max_bots,
+		Max_bots:               max_bots,
 		bots:                   make(map[string]*Bot),
 		bbb_client_url:         bbb_client_url,
 		bbb_client_ws:          bbb_client_ws,
@@ -140,16 +140,6 @@ func (bm *BotManager) Bots() map[string]*Bot {
 	return bm.bots
 }
 
-
-
-
-
-
-
-
-
-
-
 // enum task [transcribe, translate]
 type Task int
 
@@ -167,11 +157,13 @@ const (
 )
 
 type Bot struct {
-	ID           string		`json:"id"`
-	Status       StatusType	`json:"status"`
+	ID           string     `json:"id"`
+	Status       StatusType `json:"status"`
 	client       *bbbbot.Client
 	clients      map[string]*bbbbot.Client // map of language and client
-	Languages   []string		`json:"languages"`
+	captures     map[string]*pad.Pad       // map of language and capture
+	Sub_bots     int                       `json:"sub_bots"`
+	Languages    []string                  `json:"languages"`
 	clientsMutex sync.Mutex
 	streamclient *StreamClient
 	audioclient  *bbbbot.AudioClient
@@ -192,10 +184,10 @@ type Bot struct {
 	changeset_external     bool
 	changeset_port         int
 	changeset_host         string
-	Task                   Task	`json:"task"`
+	Task                   Task `json:"task"`
 
-	MeetingID string	`json:"meeting_id"`
-	UserName  string	`json:"user_name"`
+	MeetingID string `json:"meeting_id"`
+	UserName  string `json:"user_name"`
 	moderator bool
 }
 
@@ -238,6 +230,7 @@ func NewBot(
 		Task:         task,
 		client:       client,
 		clients:      make(map[string]*bbbbot.Client),
+		captures:     make(map[string]*pad.Pad),
 		Languages:    make([]string, 0),
 		streamclient: streamclient,
 		audioclient:  client.CreateAudioChannel(),
@@ -293,6 +286,11 @@ func (b *Bot) Join(
 	if err != nil {
 		return err
 	}
+
+	b.en_caption.OnDisconnect(func() {
+		log.Println("En caption disconnected")
+		b.Disconnect()
+	})
 
 	b.streamclient.OnConnected(func(message string) {
 		log.Println("Connected to server.")
@@ -389,12 +387,12 @@ func (b *Bot) Join(
 
 		go func() {
 			buffer := make([]byte, 1024)
+			defer b.oggFile.Close()
+			defer b.streamclient.Close()
 			for {
 				n, _, readErr := track.Read(buffer)
 
 				if *status == bbbbot.DISCONNECTED {
-					b.oggFile.Close()
-					b.streamclient.Close()
 					return
 				}
 
@@ -438,10 +436,13 @@ func (b *Bot) Disconnect() {
 		b.oggFile.Close()
 	}
 
-	// diconnect all clients
 	b.clientsMutex.Lock()
-	for _, cl := range b.clients {
+	for lang, cl := range b.clients {
 		cl.Leave()
+		if cap, ok := b.captures[lang]; ok {
+			cap.Disconnect()
+			delete(b.captures, lang)
+		}
 	}
 	for k := range b.clients {
 		delete(b.clients, k)
@@ -473,6 +474,10 @@ func (b *Bot) Translate(
 	if _, ok := b.clients[targetLang]; ok {
 		b.clients[targetLang].Leave()
 		delete(b.clients, targetLang)
+		if capture, ok := b.captures[targetLang]; ok {
+			capture.Disconnect()
+			delete(b.captures, targetLang)
+		}
 	}
 
 	// create a new client, join meeting and create capture
@@ -493,25 +498,32 @@ func (b *Bot) Translate(
 	new_client.Join(b.MeetingID, b.UserName+"-"+targetLang, b.moderator)
 
 	// create a new capture
-	_, err = new_client.CreateCapture(bbbbot.Language(targetLang), b.changeset_external, b.changeset_host, b.changeset_port)
+	new_capture, err := new_client.CreateCapture(bbbbot.Language(targetLang), b.changeset_external, b.changeset_host, b.changeset_port)
 	if err != nil {
 		return err
 	}
 
+	new_capture.OnDisconnect(func() {
+		log.Printf("New capture %s disconnected", targetLang)
+		b.StopTranslate(targetLang)
+	})
+
 	// add new client to the list of clients
 	b.clientsMutex.Lock()
 	b.clients[targetLang] = new_client
+	b.captures[targetLang] = new_capture
+
 	// if language code in the list, remove it
-    skipp := false
+	skipp := false
 	for _, lang := range b.Languages {
 		if lang == targetLang {
 			// remove it from the list
 			skipp = true
 		}
 	}
-    if !skipp {
-	    b.Languages = append(b.Languages, targetLang)
-    }
+	if !skipp {
+		b.Languages = append(b.Languages, targetLang)
+	}
 	b.clientsMutex.Unlock()
 
 	return nil
@@ -537,6 +549,10 @@ func (b *Bot) StopTranslate(
 		// check if client is connected
 		client.Leave()
 		delete(b.clients, targetLang)
+		if capture, ok := b.captures[targetLang]; ok {
+			capture.Disconnect()
+			delete(b.captures, targetLang)
+		}
 		// remove language from list
 		for i, lang := range b.Languages {
 			if lang == targetLang {
@@ -550,7 +566,6 @@ func (b *Bot) StopTranslate(
 				delete(b.clients, k)
 			}
 		}
-		
 
 		return nil
 	}

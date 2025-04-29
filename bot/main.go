@@ -165,6 +165,10 @@ func addRoutes(api huma.API) {
 		Summary:     "List all bots",
 		Tags:        []string{"Bots"},
 	}, func(_ context.Context, _ *struct{}) (*BotsOutput, error) {
+		for _, bot := range BM.Bots() {
+			bot.Sub_bots = len(bot.clients)
+		}
+
 		return &BotsOutput{Body: BM.Bots()}, nil
 	})
 
@@ -181,6 +185,7 @@ func addRoutes(api huma.API) {
 		if !ok {
 			return nil, huma.NewError(http.StatusNotFound, "Bot not found")
 		}
+		bot.Sub_bots = len(bot.clients)
 		return &BotOutput{Body: bot}, nil
 	})
 
