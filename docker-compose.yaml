@@ -10,6 +10,8 @@ services:
       - .env
     networks:
       - bbb-translation-bot
+    ports:
+      - 8080:8080
     depends_on:
       - changeset-service
       - transcription-service
