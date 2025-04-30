@@ -49,14 +49,26 @@ build: check-not-root
 		cd changeset-grpc/etherpad-lite; \
 		src/bin/installDeps.sh; \
 		cd ..; \
-		npm install; \
+		NPM_BIN_PATH=$$(ls -d ~/.nvm/versions/node/*/bin | head -n 1)/npm; \
+		if [ -f "$$NPM_BIN_PATH" ]; then \
+			$$NPM_BIN_PATH install; \
+		else \
+			echo "npm not found in $$NPM_BIN_PATH"; \
+			exit 1; \
+		fi; \
 	fi
 	@if [ ! "$$(ls -A changeset-grpc)" ]; then \
 		git submodule update --init --recursive; \
 		cd changeset-grpc/etherpad-lite; \
 		src/bin/installDeps.sh; \
 		cd ..; \
-		npm install; \
+		NPM_BIN_PATH=$$(ls -d ~/.nvm/versions/node/*/bin | head -n 1)/npm; \
+		if [ -f "$$NPM_BIN_PATH" ]; then \
+			$$NPM_BIN_PATH install; \
+		else \
+			echo "npm not found in $$NPM_BIN_PATH"; \
+			exit 1; \
+		fi; \
 	fi
 
 	@cd bot && go mod tidy
@@ -89,7 +101,18 @@ run: check-not-root generate-env-files install check-docker-rights stop
 run-dev: check-not-root generate-env-files install-dev check-docker-rights stop build
 	@docker compose -f docker-compose-dev.yml up --no-start
 	@screen -dmS bot bash -c "cd bot && set -a && source ../.env-dev && set +a && go run . 2>&1 | tee ../logs/bot.log"
-	@screen -dmS changeset-service bash -c "cd changeset-grpc && set -a && source ../.env-dev && set +a && npm run start 2>&1 | tee ../logs/changeset-service.log"
+	
+	@screen -dmS changeset-service bash -c "\
+		# Find the full path to npm based on the installed Node.js version; \
+		NPM_BIN_PATH=$$(ls -d ~/.nvm/versions/node/*/bin | head -n 1)/npm; \
+		if [ -f $$NPM_BIN_PATH ]; then \
+			# Run npm using its full path and log output \
+			cd changeset-grpc && set -a && source ../.env-dev && set +a && $$NPM_BIN_PATH run start 2>&1 | tee ../logs/changeset-service.log; \
+		else \
+			echo 'npm not found at $$NPM_BIN_PATH'; \
+			exit 1; \
+		fi"
+	
 	@screen -dmS transcription-service bash -c "cd transcription-service && source .venv/bin/activate && set -a && source ../.env-dev && set +a && python main.py 2>&1 | tee ../logs/transcription-service.log"
 	@screen -dmS translation-service bash -c "docker compose -f docker-compose-dev.yml up translation-service 2>&1 | tee logs/translation-service.log"
 	@screen -dmS prometheus bash -c "docker compose -f docker-compose-dev.yml up prometheus  2>&1 | tee logs/prometheus.log"
