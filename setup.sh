@@ -43,7 +43,7 @@ main() {
             add_task "Install NVIDIA Drivers" nvidia_install check_nvidia_driver  # Skip if drivers are installed
             add_task "Install NVIDIA CUDA" cuda_install check_cuda_installed  # Skip if CUDA is installed
             add_task "Install NVIDIA CUDA Toolkit" cuda_toolkit check_toolkit  # Skip if toolkit is installed
-            add_task "Install NVIDIA cuDNN 8.9.7" install_cudnn check_cudnn_installed  # Skip if cuDNN is installed
+            add_task "Install NVIDIA cuDNN 9.8.0" install_cudnn check_cudnn_installed  # Skip if cuDNN is installed
             add_task "Reboot" configure_reboot_ubuntu22 check_reboot_configured_ubuntu22  # Skip if reboot is needed
             add_task "Install Docker" install_docker check_docker_installed  # Skip if Docker is installed
             add_task "Install Docker with NVIDIA support" install_docker_nvidia check_docker_nvidia  # Skip if Docker with NVIDIA support is installed
@@ -54,7 +54,7 @@ main() {
         elif [ "$os_name" == "Ubuntu 22 WSL" ]; then
             # Ubuntu 22 WSL
             add_task "Install NVIDIA CUDA Toolkit" cuda_toolkit check_toolkit  # Skip if toolkit is installed
-            add_task "Install NVIDIA cuDNN 8.9.7" install_cudnn check_cudnn_installed  # Skip if cuDNN is installed
+            add_task "Install NVIDIA cuDNN 9.8.0" install_cudnn check_cudnn_installed  # Skip if cuDNN is installed
             add_task "Install Docker" install_docker_wsl check_docker_installed_wsl  # Skip if Docker is installed
             add_task "Install ffmpeg" install_ffmpeg check_ffmpeg_installed  # Skip if ffmpeg is installed
             add_task "Install golang" install_golang check_golang_installed  # Skip if golang is installed
@@ -65,7 +65,7 @@ main() {
             add_task "Install NVIDIA Drivers" nvidia_install_debian check_nvidia_driver_debian  # Skip if drivers are installed
             add_task "Install NVIDIA CUDA" cuda_install_debian check_cuda_installed_debian  # Skip if CUDA is installed
             add_task "Install NVIDIA CUDA Toolkit" cuda_toolkit_debian check_toolkit_debian  # Skip if toolkit is installed
-            add_task "Install NVIDIA cuDNN 8.9.7" install_cudnn check_cudnn_installed  # Skip if cuDNN is installed
+            add_task "Install NVIDIA cuDNN 9.8.0" install_cudnn check_cudnn_installed  # Skip if cuDNN is installed
             add_task "Reboot" configure_reboot_ubuntu22 check_reboot_configured_ubuntu22  # Skip if reboot is needed
             add_task "Install Docker" install_docker check_docker_installed  # Skip if Docker is installed
             add_task "Install Docker with NVIDIA support" install_docker_nvidia check_docker_nvidia  # Skip if Docker with NVIDIA support is installed
@@ -76,7 +76,7 @@ main() {
         elif [ "$os_name" == "Debian 12 WSL" ]; then
             # Debian 12 WSL
             add_task "Install NVIDIA CUDA Toolkit" cuda_toolkit_debian check_toolkit_debian  # Skip if toolkit is installed
-            add_task "Install NVIDIA cuDNN 8.9.7" install_cudnn check_cudnn_installed  # Skip if cuDNN is installed
+            add_task "Install NVIDIA cuDNN 9.8.0" install_cudnn check_cudnn_installed  # Skip if cuDNN is installed
             add_task "Install Docker" install_docker_wsl check_docker_installed_wsl  # Skip if Docker is installed
             add_task "Install ffmpeg" install_ffmpeg check_ffmpeg_installed  # Skip if ffmpeg is installed
             add_task "Install golang" install_golang check_golang_installed  # Skip if golang is installed
@@ -446,70 +446,79 @@ configure_reboot_ubuntu22() {
 #------------------------------------------------------------
 
 #------------------------------------------------------------
-# 5. Install cuDNN 8.9.7
+# 5. Install cuDNN 9.8.0
 check_cudnn_installed() {
-    if dpkg -l | grep -qw libcudnn8; then
+    if dpkg -l | grep -qw libcudnn9; then
         return 0
     else
         return 1
     fi
 }
 
+# This code is used to install lagacy versions of cuDNN. Maybe in the future we will use it again with cuDNN 9.8.0, if nvidia restricts the download of cuDNN 9.8.0, because of a new version
+# install_cudnn() {
+#     os_name=$(get_os)
+
+#     tput clear > /dev/tty
+#     tput cup 0 0 > /dev/tty
+#     tput ed > /dev/tty
+#     echo -e "\e[1;31m============================== ATTENTION REQUIRED ==============================\e[0m" > /dev/tty
+#     echo -e "\e[1;33mNVIDIA has restricted direct downloads of libcudnn packages.\e[0m" > /dev/tty
+#     echo -e "\e[1;33mPlease follow the steps below:\e[0m" > /dev/tty
+#     echo -e "\e[1;32m1. Visit: \e[1;34mhttps://developer.nvidia.com/rdp/cudnn-archive\e[0m" > /dev/tty
+#     echo -e "\e[1;32m2. Download the appropriate installer for your system.\e[0m" > /dev/tty
+#     echo -e "\e[1;34m  (Download cuDNN v8.9.7 (December 5th, 2023), for CUDA 12.x)\e[0m" > /dev/tty
+
+#     if [ "$os_name" == "Debian 12" ] || [ "$os_name" == "Debian 12 WSL" ]; then
+#         echo -e "\e[1;34m   You can downloade Local Installer for Debian 11 (Deb) for Debian 12\e[0m" > /dev/tty
+#     fi
+
+
+#     echo -e "\e[1;32m3. Place the downloaded file in this directory.\e[0m" > /dev/tty
+#     echo -e "\e[1;34m  (Filename: cudnn*.deb)\e[0m" > /dev/tty
+#     echo -e "\e[1;33mThe script will continue automatically once the correct file is detected.\e[0m" > /dev/tty
+#     echo -e "\e[1;31m================================================================================\e[0m" > /dev/tty
+
+#     echo -e "\e[1;33mWaiting for a valid cudnn installer file to be saved in the current directory...\e[0m" > /dev/tty
+
+#     # Wait for a valid file to appear
+#     while true; do
+#         # Look for any file starting with 'cudnn' and ending with '.deb'
+#         file=$(ls cudnn*.deb 2>/dev/null | head -n 1)
+#         if [ -n "$file" ]; then
+#             # File exists, now check for stability
+#             previous_size=$(stat -c%s "$file")
+#             sleep 5
+#             current_size=$(stat -c%s "$file")
+
+#             if [ "$previous_size" -eq "$current_size" ]; then
+#                 echo -e "\e[1;32mFile detected and is stable: $file. Proceeding with the installation...\e[0m" > /dev/tty
+#                 break
+#             else
+#                 echo -e "\e[1;33m$file was detected, but is still being downloaded...\e[0m" > /dev/tty
+#             fi
+#         fi
+#         sleep 5
+#         tput cuu1 > /dev/tty
+#     done
+
+#     # Go back to the task screen
+#     tput clear > /dev/tty
+#     update_task_status
+
+#     # Proceed with installation of the deb file
+#     dpkg -i "$file"
+#     cp /var/cudnn-local-repo-*/cudnn-local-*-keyring.gpg /usr/share/keyrings/
+#     apt-get update
+#     apt-get install -y libcudnn8 libcudnn8-dev
+# }
 install_cudnn() {
-    os_name=$(get_os)
-
-    tput clear > /dev/tty
-    tput cup 0 0 > /dev/tty
-    tput ed > /dev/tty
-    echo -e "\e[1;31m============================== ATTENTION REQUIRED ==============================\e[0m" > /dev/tty
-    echo -e "\e[1;33mNVIDIA has restricted direct downloads of libcudnn packages.\e[0m" > /dev/tty
-    echo -e "\e[1;33mPlease follow the steps below:\e[0m" > /dev/tty
-    echo -e "\e[1;32m1. Visit: \e[1;34mhttps://developer.nvidia.com/rdp/cudnn-archive\e[0m" > /dev/tty
-    echo -e "\e[1;32m2. Download the appropriate installer for your system.\e[0m" > /dev/tty
-    echo -e "\e[1;34m  (Download cuDNN v8.9.7 (December 5th, 2023), for CUDA 12.x)\e[0m" > /dev/tty
-
-    if [ "$os_name" == "Debian 12" ] || [ "$os_name" == "Debian 12 WSL" ]; then
-        echo -e "\e[1;34m   You can downloade Local Installer for Debian 11 (Deb) for Debian 12\e[0m" > /dev/tty
-    fi
-
-
-    echo -e "\e[1;32m3. Place the downloaded file in this directory.\e[0m" > /dev/tty
-    echo -e "\e[1;34m  (Filename: cudnn*.deb)\e[0m" > /dev/tty
-    echo -e "\e[1;33mThe script will continue automatically once the correct file is detected.\e[0m" > /dev/tty
-    echo -e "\e[1;31m================================================================================\e[0m" > /dev/tty
-
-    echo -e "\e[1;33mWaiting for a valid cudnn installer file to be saved in the current directory...\e[0m" > /dev/tty
-
-    # Wait for a valid file to appear
-    while true; do
-        # Look for any file starting with 'cudnn' and ending with '.deb'
-        file=$(ls cudnn*.deb 2>/dev/null | head -n 1)
-        if [ -n "$file" ]; then
-            # File exists, now check for stability
-            previous_size=$(stat -c%s "$file")
-            sleep 5
-            current_size=$(stat -c%s "$file")
-
-            if [ "$previous_size" -eq "$current_size" ]; then
-                echo -e "\e[1;32mFile detected and is stable: $file. Proceeding with the installation...\e[0m" > /dev/tty
-                break
-            else
-                echo -e "\e[1;33m$file was detected, but is still being downloaded...\e[0m" > /dev/tty
-            fi
-        fi
-        sleep 5
-        tput cuu1 > /dev/tty
-    done
-
-    # Go back to the task screen
-    tput clear > /dev/tty
-    update_task_status
-
-    # Proceed with installation of the deb file
-    dpkg -i "$file"
-    cp /var/cudnn-local-repo-*/cudnn-local-*-keyring.gpg /usr/share/keyrings/
-    apt-get update
-    apt-get install -y libcudnn8 libcudnn8-dev
+    # If thhis links stops working and nvidia resiricts the download of cuDNN 9.8.0, then you can use the code abouve to install cuDNN. You have to update the code abouve!
+    wget https://developer.download.nvidia.com/compute/cudnn/9.8.0/local_installers/cudnn-local-repo-ubuntu2204-9.8.0_1.0-1_amd64.deb
+    sudo dpkg -i cudnn-local-repo-ubuntu2204-9.8.0_1.0-1_amd64.deb
+    sudo cp /var/cudnn-local-repo-ubuntu2204-9.8.0/cudnn-*-keyring.gpg /usr/share/keyrings/
+    sudo apt-get update
+    sudo apt-get -y install cudnn
 }
 #------------------------------------------------------------
 
