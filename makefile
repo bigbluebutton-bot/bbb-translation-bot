@@ -102,16 +102,18 @@ run-dev: check-not-root generate-env-files install-dev check-docker-rights stop 
 	@docker compose -f docker-compose-dev.yml up --no-start
 	@screen -dmS bot bash -c "cd bot && set -a && source ../.env-dev && set +a && go run . 2>&1 | tee ../logs/bot.log"
 	
-	@screen -dmS changeset-service bash -c "\
-		# Find the full path to npm based on the installed Node.js version; \
-		NPM_BIN_PATH=$$(ls -d ~/.nvm/versions/node/*/bin | head -n 1)/npm; \
-		if [ -f $$NPM_BIN_PATH ]; then \
-			# Run npm using its full path and log output \
-			cd changeset-grpc && set -a && source ../.env-dev && set +a && $$NPM_BIN_PATH run start 2>&1 | tee ../logs/changeset-service.log; \
+	@screen -dmS changeset-service bash -c '\
+		NPM_BIN_PATH=$$(ls -d $$HOME/.nvm/versions/node/*/bin | head -n 1)/npm; \
+		if [ -f "$$NPM_BIN_PATH" ]; then \
+			echo "npm found at $$NPM_BIN_PATH"; \
+			cd changeset-grpc && \
+			set -a && source ../.env-dev && set +a && \
+			"$$NPM_BIN_PATH" run start 2>&1 | tee ../logs/changeset-service.log; \
 		else \
-			echo 'npm not found at $$NPM_BIN_PATH'; \
+			echo "npm not found at $$NPM_BIN_PATH"; \
 			exit 1; \
-		fi"
+		fi'
+
 	
 	@screen -dmS transcription-service bash -c "cd transcription-service && source .venv/bin/activate && set -a && source ../.env-dev && set +a && python main.py 2>&1 | tee ../logs/transcription-service.log"
 	@screen -dmS translation-service bash -c "docker compose -f docker-compose-dev.yml up translation-service 2>&1 | tee logs/translation-service.log"
