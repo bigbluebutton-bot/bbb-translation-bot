@@ -11,8 +11,8 @@ read -p "Enter the domain where your BBB server is hosted (e.g., example.com): "
 # Prompt the user for the BBB secret
 read -p "Enter the BBB secret: " SECRET
 
-# Whisper model size (tiny, tiny.en, small, small.en, base, base.en, medium, medium.en, large-v1, large-v2, large-v3, turbo-v3)
-read -p "Enter the whisper model size (tiny, small, base, medium, large, turbo): " WHISPER_MODEL_SIZE
+# Whisper model size (tiny.en, tiny, base.en, base, small.en, small, medium.en, medium, large-v1, large-v2, large-v3, large, distil-large-v2, distil-medium.en, distil-small.en, distil-large-v3)
+read -p "Enter the whisper model size (tiny.en, tiny, base.en, base, small.en, small, medium.en, medium, large-v1, large-v2, large-v3, large, distil-large-v2, distil-medium.en, distil-small.en, distil-large-v3) or use your own module like (deepdml/faster-whisper-large-v3-turbo-ct2): " WHISPER_MODEL_SIZE
 
 create_file_if_not_exists() {
   local file_name="$1"
