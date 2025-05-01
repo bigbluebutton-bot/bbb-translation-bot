@@ -43,7 +43,7 @@ main() {
             add_task "Install NVIDIA Drivers" nvidia_install check_nvidia_driver  # Skip if drivers are installed
             add_task "Install NVIDIA CUDA" cuda_install check_cuda_installed  # Skip if CUDA is installed
             add_task "Install NVIDIA CUDA Toolkit" cuda_toolkit check_toolkit  # Skip if toolkit is installed
-            add_task "Install NVIDIA cuDNN 9.8.0" install_cudnn check_cudnn_installed  # Skip if cuDNN is installed
+            add_task "Install NVIDIA cuDNN 9.1.0" install_cudnn check_cudnn_installed  # Skip if cuDNN is installed
             add_task "Reboot" configure_reboot_ubuntu22 check_reboot_configured_ubuntu22  # Skip if reboot is needed
             add_task "Install Docker" install_docker check_docker_installed  # Skip if Docker is installed
             add_task "Install Docker with NVIDIA support" install_docker_nvidia check_docker_nvidia  # Skip if Docker with NVIDIA support is installed
@@ -54,7 +54,7 @@ main() {
         elif [ "$os_name" == "Ubuntu 22 WSL" ]; then
             # Ubuntu 22 WSL
             add_task "Install NVIDIA CUDA Toolkit" cuda_toolkit check_toolkit  # Skip if toolkit is installed
-            add_task "Install NVIDIA cuDNN 9.8.0" install_cudnn check_cudnn_installed  # Skip if cuDNN is installed
+            add_task "Install NVIDIA cuDNN 9.1.0" install_cudnn check_cudnn_installed  # Skip if cuDNN is installed
             add_task "Install Docker" install_docker_wsl check_docker_installed_wsl  # Skip if Docker is installed
             add_task "Install ffmpeg" install_ffmpeg check_ffmpeg_installed  # Skip if ffmpeg is installed
             add_task "Install golang" install_golang check_golang_installed  # Skip if golang is installed
@@ -65,7 +65,7 @@ main() {
             add_task "Install NVIDIA Drivers" nvidia_install_debian check_nvidia_driver_debian  # Skip if drivers are installed
             add_task "Install NVIDIA CUDA" cuda_install_debian check_cuda_installed_debian  # Skip if CUDA is installed
             add_task "Install NVIDIA CUDA Toolkit" cuda_toolkit_debian check_toolkit_debian  # Skip if toolkit is installed
-            add_task "Install NVIDIA cuDNN 9.8.0" install_cudnn check_cudnn_installed  # Skip if cuDNN is installed
+            add_task "Install NVIDIA cuDNN 9.1.0" install_cudnn check_cudnn_installed  # Skip if cuDNN is installed
             add_task "Reboot" configure_reboot_ubuntu22 check_reboot_configured_ubuntu22  # Skip if reboot is needed
             add_task "Install Docker" install_docker check_docker_installed  # Skip if Docker is installed
             add_task "Install Docker with NVIDIA support" install_docker_nvidia check_docker_nvidia  # Skip if Docker with NVIDIA support is installed
@@ -76,7 +76,7 @@ main() {
         elif [ "$os_name" == "Debian 12 WSL" ]; then
             # Debian 12 WSL
             add_task "Install NVIDIA CUDA Toolkit" cuda_toolkit_debian check_toolkit_debian  # Skip if toolkit is installed
-            add_task "Install NVIDIA cuDNN 9.8.0" install_cudnn check_cudnn_installed  # Skip if cuDNN is installed
+            add_task "Install NVIDIA cuDNN 9.1.0" install_cudnn check_cudnn_installed  # Skip if cuDNN is installed
             add_task "Install Docker" install_docker_wsl check_docker_installed_wsl  # Skip if Docker is installed
             add_task "Install ffmpeg" install_ffmpeg check_ffmpeg_installed  # Skip if ffmpeg is installed
             add_task "Install golang" install_golang check_golang_installed  # Skip if golang is installed
@@ -446,7 +446,7 @@ configure_reboot_ubuntu22() {
 #------------------------------------------------------------
 
 #------------------------------------------------------------
-# 5. Install cuDNN 9.8.0
+# 5. Install cuDNN 9.1.0
 check_cudnn_installed() {
     if dpkg -l | grep -qw libcudnn9; then
         return 0
@@ -455,7 +455,7 @@ check_cudnn_installed() {
     fi
 }
 
-# This code is used to install lagacy versions of cuDNN. Maybe in the future we will use it again with cuDNN 9.8.0, if nvidia restricts the download of cuDNN 9.8.0, because of a new version
+# This code is used to install lagacy versions of cuDNN. Maybe in the future we will use it again with cuDNN 9.1.0, if nvidia restricts the download of cuDNN 9.1.0, because of a new version
 # install_cudnn() {
 #     os_name=$(get_os)
 
@@ -513,12 +513,44 @@ check_cudnn_installed() {
 #     apt-get install -y libcudnn8 libcudnn8-dev
 # }
 install_cudnn() {
-    # If thhis links stops working and nvidia resiricts the download of cuDNN 9.8.0, then you can use the code abouve to install cuDNN. You have to update the code abouve!
-    wget https://developer.download.nvidia.com/compute/cudnn/9.8.0/local_installers/cudnn-local-repo-ubuntu2204-9.8.0_1.0-1_amd64.deb
-    sudo dpkg -i cudnn-local-repo-ubuntu2204-9.8.0_1.0-1_amd64.deb
-    sudo cp /var/cudnn-local-repo-ubuntu2204-9.8.0/cudnn-*-keyring.gpg /usr/share/keyrings/
+    # If thhis links stops working and nvidia resiricts the download of cuDNN 9.1.0, then you can use the code abouve to install cuDNN. You have to update the code abouve!
+    wget https://developer.download.nvidia.com/compute/cudnn/9.1.0/local_installers/cudnn-local-repo-ubuntu2204-9.1.0_1.0-1_amd64.deb
+    sudo dpkg -i cudnn-local-repo-ubuntu2204-9.1.0_1.0-1_amd64.deb
+    sudo cp /var/cudnn-local-repo-ubuntu2204-9.1.0/cudnn-*-keyring.gpg /usr/share/keyrings/
     sudo apt-get update
     sudo apt-get -y install cudnn
+
+    # Update PATH and LD_LIBRARY_PATH for the current root session
+    export PATH=/usr/local/cuda-12.0/bin:$PATH
+    export LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH
+
+    # Update PATH and LD_LIBRARY_PATH in root's .bashrc
+    if ! grep -q '/usr/local/cuda-12.0/bin' /root/.bashrc; then
+        echo 'export PATH=/usr/local/cuda-12.0/bin:$PATH' >> /root/.bashrc
+    fi
+    if ! grep -q '/usr/local/cuda/lib64' /root/.bashrc; then
+        echo 'export LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH' >> /root/.bashrc
+    fi
+
+    # Update PATH and LD_LIBRARY_PATH for the original user
+    if [[ -n "$SUDO_USER" ]]; then
+        ORIGINAL_USER_HOME=$(eval echo ~$SUDO_USER)
+        ORIGINAL_USER_BASHRC="$ORIGINAL_USER_HOME/.bashrc"
+
+        # Update .bashrc for the original user
+        if ! grep -q '/usr/local/cuda-12.0/bin' "$ORIGINAL_USER_BASHRC"; then
+            echo 'export PATH=/usr/local/cuda-12.0/bin:$PATH' >> "$ORIGINAL_USER_BASHRC"
+        fi
+        if ! grep -q '/usr/local/cuda/lib64' "$ORIGINAL_USER_BASHRC"; then
+            echo 'export LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH' >> "$ORIGINAL_USER_BASHRC"
+        fi
+
+        # Apply the changes to the original user's current session (if possible)
+        if ps -p "$PPID" -o comm= | grep -q bash; then
+            su - "$SUDO_USER" -c "export PATH=/usr/local/cuda-12.0/bin:\$PATH && export LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/lib/x86_64-linux-gnu:\$LD_LIBRARY_PATH"
+        fi
+    fi
+
 }
 #------------------------------------------------------------
 
