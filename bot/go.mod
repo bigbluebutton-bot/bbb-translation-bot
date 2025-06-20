@@ -7,7 +7,7 @@ toolchain go1.24.2
 require (
 	github.com/bigbluebutton-bot/bigbluebutton-bot v0.1.7
 	github.com/danielgtaylor/huma/v2 v2.32.0
-	github.com/go-chi/chi/v5 v5.2.1
+	github.com/go-chi/chi/v5 v5.2.2
 	github.com/google/uuid v1.6.0
 	github.com/pion/rtp v1.8.15
 	github.com/pion/webrtc/v3 v3.3.5
