@@ -32,7 +32,7 @@ type TCPclient struct {
 	encryptionEnabled bool
 	serverPublicKey   *rsa.PublicKey
 	BufferSize        int
-	PingTimeIntervall time.Duration
+	PingTimeInterval time.Duration
 	StopChan          chan bool
 
 	Secret_token string
@@ -59,7 +59,7 @@ func NewTCPclient(addr string, encryption bool) *TCPclient {
 		encryptionEnabled: encryption,
 		serverPublicKey:   nil,
 		BufferSize:        1024,
-		PingTimeIntervall: 4 * time.Second,
+		PingTimeInterval: 4 * time.Second,
 		StopChan:          make(chan bool),
 
 		Secret_token: "",
@@ -222,7 +222,7 @@ func (c *TCPclient) Close() {
 	c.status = DISCONNECTED
 }
 
-// Receve messages from the server
+// Receive messages from the server
 func (c *TCPclient) receive() {
 	for {
 		select {
@@ -261,14 +261,14 @@ func (c *TCPclient) receive() {
 	}
 }
 
-// Will send a ping every PingTimeIntervall seconds
+// Will send a ping every PingTimeInterval seconds
 func (c *TCPclient) sendPing() {
 	for {
 		select {
 		case <-c.StopChan:
 			return
 		default:
-			time.Sleep(c.PingTimeIntervall)
+			time.Sleep(c.PingTimeInterval)
 			err := c.Send("PING")
 			if err != nil {
 				fmt.Println("Failed to send ping:", err)

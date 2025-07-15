@@ -455,7 +455,7 @@ check_cudnn_installed() {
     fi
 }
 
-# This code is used to install lagacy versions of cuDNN. Maybe in the future we will use it again with cuDNN 9.1.0, if nvidia restricts the download of cuDNN 9.1.0, because of a new version
+# This code is used to install legacy versions of cuDNN. Maybe in the future we will use it again with cuDNN 9.1.0, if nvidia restricts the download of cuDNN 9.1.0, because of a new version
 # install_cudnn() {
 #     os_name=$(get_os)
 
@@ -513,7 +513,7 @@ check_cudnn_installed() {
 #     apt-get install -y libcudnn8 libcudnn8-dev
 # }
 install_cudnn() {
-    # If thhis links stops working and nvidia resiricts the download of cuDNN 9.1.0, then you can use the code abouve to install cuDNN. You have to update the code abouve!
+    # If this links stops working and nvidia resiricts the download of cuDNN 9.1.0, then you can use the code above to install cuDNN. You have to update the code above!
     wget https://developer.download.nvidia.com/compute/cudnn/9.1.0/local_installers/cudnn-local-repo-ubuntu2204-9.1.0_1.0-1_amd64.deb
     sudo dpkg -i cudnn-local-repo-ubuntu2204-9.1.0_1.0-1_amd64.deb
     sudo cp /var/cudnn-local-repo-ubuntu2204-9.1.0/cudnn-*-keyring.gpg /usr/share/keyrings/
@@ -1190,12 +1190,12 @@ process_tasks() {
 }
 
 REBOOT_OPTIONS=""
-ORGINAL_USER=$SUDO_USER
+ORIGINAL_USER=$SUDO_USER
 
 # Function to configure the system to reboot
 reboot_now() {
     if ! grep -Fq "$FULL_PATH_OF_THIS_SCRIPT" /etc/crontab; then
-        echo "@reboot root /usr/bin/screen -dmS $SCREEN_NAME /bin/bash $FULL_PATH_OF_THIS_SCRIPT --cron $REBOOT_OPTIONS --user $ORGINAL_USER" >> /etc/crontab
+        echo "@reboot root /usr/bin/screen -dmS $SCREEN_NAME /bin/bash $FULL_PATH_OF_THIS_SCRIPT --cron $REBOOT_OPTIONS --user $ORIGINAL_USER" >> /etc/crontab
     fi
 
     # Add a login hint only if there is no desktop installed. A desktop will cause login issues.
@@ -1303,8 +1303,8 @@ update() {
 #------------------------------------------------------------
 
 #------------------------------------------------------------
-# 0. Install nessecary packages
-check_nessecary_packages_installed() {
+# 0. Install necessary packages
+check_necessary_packages_installed() {
     if dpkg -l | grep -qw wget && dpkg -l | grep -qw curl && dpkg -l | grep -qw dpkg && dpkg -l | grep -qw screen && dpkg -l | grep -qw make && dpkg -l | grep -qw grep; then
         return 0
     else
@@ -1312,7 +1312,7 @@ check_nessecary_packages_installed() {
     fi
 }
 
-install_nessecary_packages() {
+install_necessary_packages() {
     apt install wget curl dpkg screen make grep -y
 }
 
@@ -1327,7 +1327,7 @@ fi
 check_root
 
 add_task "Update System Packages" update ""  # No skip function
-add_task "Install nessecary packages" install_nessecary_packages check_nessecary_packages_installed  # Skip if drivers are installed
+add_task "Install necessary packages" install_necessary_packages check_necessary_packages_installed  # Skip if drivers are installed
 
 # Run the main function
 main
