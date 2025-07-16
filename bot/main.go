@@ -358,7 +358,7 @@ func addRoutes(api huma.API) {
 			}
 		}
 		if !found {
-			return nil, huma.NewError(http.StatusNotFound, "Language ist not actively being translated")
+			return nil, huma.NewError(http.StatusNotFound, "Language is not actively being translated")
 		}
 
 		if err := bot.StopTranslate(input.Lang); err != nil {

@@ -514,14 +514,14 @@ func (b *Bot) Translate(
 	b.captures[targetLang] = new_capture
 
 	// if language code in the list, remove it
-	skipp := false
+	skip := false
 	for _, lang := range b.Languages {
 		if lang == targetLang {
 			// remove it from the list
-			skipp = true
+			skip = true
 		}
 	}
-	if !skipp {
+	if !skip {
 		b.Languages = append(b.Languages, targetLang)
 	}
 	b.clientsMutex.Unlock()
